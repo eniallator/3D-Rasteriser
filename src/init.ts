@@ -28,12 +28,24 @@ const appContext: AppContext<typeof config> = {
   ctx,
   mouse,
 };
+
+let appState = app.type === "stateful" ? app.init(appContext) : null;
+if (app.type === "stateless") {
+  app.init?.(appContext);
+}
+
 paramConfig.addCopyToClipboardHandler("#share-btn");
 
 window.onresize = (evt) => {
   updateCanvasBounds(canvas);
-  if (app.onResize != null) {
-    app.onResize(evt, appContext);
+  const { width, height } = canvas.getBoundingClientRect();
+  canvas.width = width;
+  canvas.height = height;
+  if (app.type === "stateful") {
+    appState =
+      app.onResize?.(evt, { ...appContext, state: appState! }) ?? appState;
+  } else {
+    app.onResize?.(evt, appContext);
   }
 };
 
@@ -50,7 +62,7 @@ dom.addListener(dom.get("#download-btn"), "click", () => {
 });
 
 dom.addListener(dom.get("#config-dropdown-btn"), "click", () =>
-  dom.get<HTMLDialogElement>("dialog#config-modal").showModal()
+  dom.get<HTMLDialogElement>("#config-modal").showModal()
 );
 
 dom.addListener(
@@ -63,12 +75,14 @@ dom.addListener(
   }
 );
 
-app.init(appContext);
-
-const { animationFrame } = app;
-if (animationFrame != null) {
+if (app.animationFrame != null) {
   const animate = () => {
-    animationFrame(appContext);
+    if (app.type === "stateful") {
+      appState =
+        app.animationFrame?.({ ...appContext, state: appState! }) ?? appState;
+    } else {
+      app.animationFrame?.(appContext);
+    }
     requestAnimationFrame(animate);
   };
   requestAnimationFrame(animate);

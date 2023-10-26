@@ -1,4 +1,4 @@
-import { AppContext, appMethods } from "../core/types";
+import { AppContextWithState, appMethods } from "../core/types";
 import Vector, { Components2D, Components3D } from "../core/Vector";
 import config from "./config";
 
@@ -8,12 +8,6 @@ interface State {
   lastSpawned: number;
   lastFrame: number;
 }
-const state: State = {
-  stars: [],
-  dirNorm: Vector.create(1, 0, 0),
-  lastSpawned: 0,
-  lastFrame: Date.now(),
-};
 
 function intersect(
   vecA: Vector<Components3D>,
@@ -67,10 +61,8 @@ function project(
 
     return xAxisIntersection != null && yAxisIntersection != null
       ? Vector.create(
-          xAxisIntersection.sub(pointOnPlane).getMagnitude() *
-            (xAxis.dot(xAxisIntersection) >= 0 ? 1 : -1),
-          yAxisIntersection.sub(pointOnPlane).getMagnitude() *
-            (yAxis.dot(yAxisIntersection) >= 0 ? 1 : -1)
+          xAxisIntersection.dot(xAxis),
+          yAxisIntersection.dot(yAxis)
         )
       : undefined;
   }
@@ -89,46 +81,56 @@ function animationFrame({
   paramConfig,
   ctx,
   canvas,
-}: AppContext<typeof config>) {
+  state,
+}: AppContextWithState<typeof config, State>) {
+  let { stars, lastSpawned, dirNorm, lastFrame } = state;
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const boxSize = paramConfig.getVal("box-size");
-  for (let i = state.stars.length - 1; i >= 0; i--) {
-    if (state.stars[i].x() < 0) {
-      state.stars.splice(i, 1);
+  for (let i = stars.length - 1; i >= 0; i--) {
+    if (stars[i].x() < 0) {
+      stars.splice(i, 1);
     }
   }
 
   const now = Date.now();
 
+  const spawnDelay = paramConfig.getVal("spawn-delay-seconds");
   while (
-    state.stars.length < paramConfig.getVal("max-stars") &&
-    state.lastSpawned + paramConfig.getVal("spawn-delay-seconds") * 1000 < now
+    stars.length < paramConfig.getVal("max-stars") &&
+    (spawnDelay === 0 || lastSpawned + spawnDelay * 1000 < now)
   ) {
-    state.stars.push(createStar(boxSize));
-    state.lastSpawned = now;
+    stars.push(createStar(boxSize));
+    lastSpawned = now;
   }
 
-  const halfScreenDim = Vector.create(canvas.width / 2, canvas.height / 2);
-  const dt = (now - state.lastFrame) / 1000;
-  state.lastFrame = now;
+  const screenDim = Vector.create(canvas.width, canvas.height);
+  const dt = (now - lastFrame) / 1000;
+  lastFrame = now;
   const posDelta = Vector.create(dt * -paramConfig.getVal("speed"), 0, 0);
 
   ctx.fillStyle = "white";
-  for (const star of state.stars) {
-    const screenPos = project(state.dirNorm, star, paramConfig.getVal("fov"))
-      ?.add(1)
-      .multiply(halfScreenDim);
+  for (const star of stars) {
+    const screenPos = project(dirNorm, star, paramConfig.getVal("fov"))
+      ?.add(0.5)
+      .multiply(screenDim);
+
     if (screenPos != null) {
       ctx.fillRect(screenPos.x() - 5, screenPos.y() - 5, 10, 10);
     }
     star.add(posDelta);
   }
+
+  return { stars, lastSpawned, dirNorm, lastFrame };
 }
 
-export default appMethods({
-  init,
-  onResize,
+export default appMethods.stateful<typeof config, State>({
+  init: () => ({
+    stars: [],
+    dirNorm: Vector.create(1, 0, 0),
+    lastSpawned: 0,
+    lastFrame: Date.now(),
+  }),
   animationFrame,
 });

@@ -1,5 +1,3 @@
-import { Guard } from "./guard";
-
 export default class Monad<A> {
   private _value: A;
 
@@ -29,8 +27,6 @@ export default class Monad<A> {
     callback(this._value);
     return this;
   }
-
-  guardWith<T>(guard: Guard<T>): Monad<T | null> {}
 
   /**
    * Get the current value of this monad

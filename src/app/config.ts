@@ -4,17 +4,17 @@ export default config(
   rangeConfig({
     id: "fov",
     label: "Field of vision",
-    default: 1,
+    default: 2,
     attrs: {
       min: "0.2",
-      max: "5",
+      max: "50",
       step: "0.1",
     },
   }),
   numberConfig({
     id: "max-stars",
     label: "Max number of stars to have at any point",
-    default: 100,
+    default: 1000,
     attrs: {
       min: "1",
       max: "1000",
@@ -23,7 +23,7 @@ export default config(
   rangeConfig({
     id: "box-size",
     label: "Box size to spawn stars",
-    default: 100,
+    default: 500,
     attrs: {
       min: "10",
       max: "500",
@@ -33,7 +33,7 @@ export default config(
   numberConfig({
     id: "spawn-delay-seconds",
     label: "Spawn delay in seconds",
-    default: 0.1,
+    default: 0.01,
     attrs: {
       min: "0",
       max: "30",
@@ -43,7 +43,7 @@ export default config(
   rangeConfig({
     id: "speed",
     label: "Star speed",
-    default: 10,
+    default: 100,
     attrs: {
       min: "0.1",
       max: "100",
