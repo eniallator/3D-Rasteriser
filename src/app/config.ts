@@ -26,8 +26,8 @@ export default config(
     default: 500,
     attrs: {
       min: "10",
-      max: "500",
-      step: "",
+      max: "1000",
+      step: "5",
     },
   }),
   numberConfig({
@@ -45,9 +45,29 @@ export default config(
     label: "Star speed",
     default: 100,
     attrs: {
-      min: "0.1",
-      max: "100",
+      min: "0",
+      max: "1000",
       step: "0.1",
+    },
+  }),
+  rangeConfig({
+    id: "star-size",
+    label: "Star size",
+    default: 0.2,
+    attrs: {
+      min: "0.01",
+      max: "1",
+      step: "0.01",
+    },
+  }),
+  rangeConfig({
+    id: "tail-size",
+    label: "Tail size",
+    default: 10,
+    attrs: {
+      min: "1",
+      max: "100",
+      step: "1",
     },
   })
 );

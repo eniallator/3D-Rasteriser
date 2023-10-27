@@ -2,8 +2,13 @@ import { AppContextWithState, appMethods } from "../core/types";
 import Vector, { Components2D, Components3D } from "../core/Vector";
 import config from "./config";
 
+interface Star {
+  pos: Vector<Components3D>;
+  tail: Array<Vector<Components3D>>;
+}
+
 interface State {
-  stars: Array<Vector<Components3D>>;
+  stars: Array<Star>;
   dirNorm: Vector<Components3D>;
   lastSpawned: number;
   lastFrame: number;
@@ -69,12 +74,15 @@ function project(
   return undefined;
 }
 
-function createStar(boxSize: number): Vector<Components3D> {
-  return Vector.create(
-    boxSize / 2,
-    boxSize * Math.random() - boxSize / 2,
-    boxSize * Math.random() - boxSize / 2
-  );
+function createStar(boxSize: number): Star {
+  return {
+    pos: Vector.create(
+      boxSize / 2,
+      boxSize * Math.random() - boxSize / 2,
+      boxSize * Math.random() - boxSize / 2
+    ),
+    tail: [],
+  };
 }
 
 function animationFrame({
@@ -84,12 +92,13 @@ function animationFrame({
   state,
 }: AppContextWithState<typeof config, State>) {
   let { stars, lastSpawned, dirNorm, lastFrame } = state;
+  ctx.strokeStyle = "white";
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const boxSize = paramConfig.getVal("box-size");
   for (let i = stars.length - 1; i >= 0; i--) {
-    if (stars[i].x() < 0) {
+    if (stars[i].pos.x() < 0) {
       stars.splice(i, 1);
     }
   }
@@ -110,16 +119,40 @@ function animationFrame({
   lastFrame = now;
   const posDelta = Vector.create(dt * -paramConfig.getVal("speed"), 0, 0);
 
-  ctx.fillStyle = "white";
+  ctx.lineWidth = (screenDim.getMin() / 100) * paramConfig.getVal("star-size");
+  ctx.lineCap = "round";
   for (const star of stars) {
-    const screenPos = project(dirNorm, star, paramConfig.getVal("fov"))
-      ?.add(0.5)
-      .multiply(screenDim);
+    ctx.beginPath();
+    let first = true;
+    for (const pos of [star.pos, ...star.tail]) {
+      const screenPos = project(dirNorm, pos, paramConfig.getVal("fov"))
+        ?.add(0.5)
+        .multiply(screenDim);
 
-    if (screenPos != null) {
-      ctx.fillRect(screenPos.x() - 5, screenPos.y() - 5, 10, 10);
+      if (screenPos != null) {
+        if (first) {
+          first = false;
+          ctx.moveTo(screenPos.x(), screenPos.y());
+          ctx.lineTo(screenPos.x(), screenPos.y());
+        } else {
+          ctx.lineTo(screenPos.x(), screenPos.y());
+        }
+      }
     }
-    star.add(posDelta);
+    ctx.stroke();
+    star.tail = [star.pos.copy(), ...star.tail];
+    star.pos.add(posDelta);
+    const tailSizeSquared = paramConfig.getVal("tail-size") ** 2;
+    for (let i = star.tail.length - 1; i >= 0; i--) {
+      if (
+        star.tail[i].copy().sub(star.pos).getSquaredMagnitude() >
+        tailSizeSquared
+      ) {
+        star.tail.pop();
+      } else {
+        break;
+      }
+    }
   }
 
   return { stars, lastSpawned, dirNorm, lastFrame };
