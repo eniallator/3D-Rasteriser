@@ -1,24 +1,24 @@
 import { AppContextWithState, appMethods } from "../core/types";
-import Vector, { Components2D, Components3D } from "../core/Vector";
+import Vector from "../core/Vector";
 import config from "./config";
 
 interface Star {
-  pos: Vector<Components3D>;
-  tail: Array<Vector<Components3D>>;
+  pos: Vector<3>;
+  tail: Array<Vector<3>>;
 }
 
 interface State {
   stars: Array<Star>;
-  dirNorm: Vector<Components3D>;
+  dirNorm: Vector<3>;
   lastSpawned: number;
   lastFrame: number;
 }
 
 function intersect(
-  vecA: Vector<Components3D>,
-  vecB: Vector<Components3D>,
-  point: Vector<Components3D>
-): Vector<Components3D> | undefined {
+  vecA: Vector<3>,
+  vecB: Vector<3>,
+  point: Vector<3>
+): Vector<3> | undefined {
   const a = vecA.copy().sub(point).getMagnitude();
   const b = vecB.copy().sub(point).getMagnitude();
   const c = vecA.copy().sub(vecB).getMagnitude();
@@ -30,10 +30,10 @@ function intersect(
 }
 
 function project(
-  dirNorm: Vector<Components3D>,
-  point: Vector<Components3D>,
+  dirNorm: Vector<3>,
+  point: Vector<3>,
   fov: number
-): Vector<Components2D> | undefined {
+): Vector<2> | undefined {
   if (point.dot(dirNorm) > 0) {
     const screenCenterPos = dirNorm.copy().setMagnitude(1 / fov);
     const pointNorm = point.getNorm();
@@ -91,7 +91,8 @@ function animationFrame({
   canvas,
   state,
 }: AppContextWithState<typeof config, State>) {
-  let { stars, lastSpawned, dirNorm, lastFrame } = state;
+  const { stars, dirNorm } = state;
+  let { lastSpawned, lastFrame } = state;
   ctx.strokeStyle = "white";
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);

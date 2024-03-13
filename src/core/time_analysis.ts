@@ -1,10 +1,3 @@
-class AnalysisError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "AnalysisError";
-  }
-}
-
 class AuditError extends Error {
   constructor(message: string) {
     super(message);
@@ -13,6 +6,7 @@ class AuditError extends Error {
 }
 
 interface Timeable {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   target: any;
   methodNames: Array<string>;
   minDebugLevel: number;
@@ -49,6 +43,7 @@ export default class TimeAnalysis {
    *  If called multiple times with the same method, the lower of the two debug levels is taken.
    */
   static registerMethods(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     target: any,
     methodNames: Array<string> | undefined = undefined,
     minDebugLevel: number = 1
@@ -57,7 +52,7 @@ export default class TimeAnalysis {
       methodNames = Object.getOwnPropertyNames(
         target.prototype || target
       ).filter(
-        (name) => name !== "constructor" && typeof target[name] !== "function"
+        name => name !== "constructor" && typeof target[name] !== "function"
       );
     }
     this.methods.push({ target, methodNames, minDebugLevel });
@@ -70,23 +65,23 @@ export default class TimeAnalysis {
   constructor(debugLevel: number = Infinity) {
     this.debugLevel = debugLevel;
     TimeAnalysis.methods
-      .filter((item) => item.minDebugLevel < debugLevel)
-      .forEach((item) =>
-        item.methodNames.forEach((methodName) => {
+      .filter(item => item.minDebugLevel < debugLevel)
+      .forEach(item =>
+        item.methodNames.forEach(methodName => {
+          const target = item.target;
+          const method = target[methodName] ?? target?.prototype?.[methodName];
           const patchedMethod = this.timeMethod(
-            item.target.prototype
-              ? item.target.prototype[methodName]
-              : item.target[methodName],
+            method,
             methodName,
             item.minDebugLevel,
-            item.target?.name
+            target?.name
           );
           if (patchedMethod != null) {
             try {
-              if (item.target.prototype) {
-                item.target.prototype[methodName] = patchedMethod;
+              if (target.prototype) {
+                target.prototype[methodName] = patchedMethod;
               } else {
-                item.target[methodName] = patchedMethod;
+                target[methodName] = patchedMethod;
               }
             } catch (e) {
               return;
@@ -98,7 +93,7 @@ export default class TimeAnalysis {
 
   private timeMethod<
     T,
-    F extends (this: ThisType<T>, ...args: Array<any>) => any
+    F extends (this: ThisType<T>, ...args: Array<unknown>) => unknown,
   >(
     method: F,
     methodName: string,
@@ -127,7 +122,7 @@ export default class TimeAnalysis {
     TimeAnalysis.methodTimes[targetName][methodName].setup = true;
 
     const currTimes = TimeAnalysis.methodTimes[targetName][methodName];
-    return function (this: ThisType<T>, ...args: Array<any>): any {
+    return function (this: ThisType<T>, ...args: Array<unknown>): unknown {
       const startTime = performance.now();
       const ret = method.apply(this, args);
       currTimes.totalExecutionTime += performance.now() - startTime;
@@ -160,9 +155,9 @@ export default class TimeAnalysis {
   generateStats(): Record<string, Record<string, Analytics>> {
     const stats: Record<string, Record<string, Analytics>> = {};
     if (this.recordedStats != null) {
-      for (let target of Object.keys(this.recordedStats)) {
+      for (const target of Object.keys(this.recordedStats)) {
         stats[target] = {};
-        for (let methodName of Object.keys(this.recordedStats[target])) {
+        for (const methodName of Object.keys(this.recordedStats[target])) {
           stats[target][methodName] = {
             ...this.recordedStats[target][methodName],
             calls:
@@ -192,7 +187,7 @@ export default class TimeAnalysis {
     }
     this.auditing = true;
     this.recordCurrentStats();
-    return new Promise((resolve) =>
+    return new Promise(resolve =>
       setTimeout(() => {
         const stats = this.generateStats();
         this.auditing = false;
@@ -264,7 +259,7 @@ class TimeAudit {
    * @yields {string} Current target
    */
   *targets(): Generator<string> {
-    for (let target of Object.keys(this.stats)) {
+    for (const target of Object.keys(this.stats)) {
       yield target;
     }
   }
@@ -275,7 +270,7 @@ class TimeAudit {
    * @yields {string} Current methodName
    */
   *methodNames(target: string): Generator<string> {
-    for (let methodName of Object.keys(this.stats[target])) {
+    for (const methodName of Object.keys(this.stats[target])) {
       yield methodName;
     }
   }
@@ -291,8 +286,8 @@ class TimeAudit {
       methodName: string
     ) => void
   ): void {
-    for (let target of this.targets()) {
-      for (let methodName of this.methodNames(target)) {
+    for (const target of this.targets()) {
+      for (const methodName of this.methodNames(target)) {
         callbackFn({ ...this.stats[target][methodName] }, target, methodName);
       }
     }
@@ -304,13 +299,13 @@ class TimeAudit {
    */
   toString(): string {
     let auditString = "";
-    for (let target of this.targets()) {
+    for (const target of this.targets()) {
       let targetAudit = `===== ${target} =====\n`;
       if (auditString !== "") {
         targetAudit = "\n\n" + targetAudit;
       }
       let hasValues = false;
-      for (let methodName of this.methodNames(target)) {
+      for (const methodName of this.methodNames(target)) {
         const currStats = this.stats[target][methodName];
         if (currStats.calls === 0) continue;
 

@@ -1,145 +1,147 @@
-import { isNumber } from "../guard";
+import { isArrayOf, isNumber } from "../guard";
 import TimeAnalysis from "../time_analysis";
 import {
   IncompatibleOperation,
-  IncompatibleVectors,
+  IncompatibleVector,
   OutOfBounds,
 } from "./error";
 import {
   is2D,
   is3D,
+  isAnyVector,
   isComponents,
   isMin2D,
   isMin3D,
   isMin4D,
   isSameSize,
-  narrowArg,
+  toAnyComponents,
+  vectorArgAccessor,
 } from "./helpers";
 import {
-  AnyComponents,
   VectorArg,
-  Components2D,
-  Components3D,
-  Components4D,
-  ArrayToNumber,
-  MinSize,
-  ComponentsND,
+  MinSizeComponents,
+  Components,
+  AnyComponents,
 } from "./types";
 
-export default class Vector<const C extends AnyComponents> {
-  private components: C;
+export default class Vector<const N extends number | undefined> {
+  type = "Vector" as const;
+  private components: Components<N>;
 
-  private constructor(params: C) {
+  private constructor(params: Components<N>) {
     this.components = params;
   }
 
   /**
    * Robust Vector class which has many available operations
-   * @param {AnyComponents} components The components of the vector, can be any size.
+   * @param {ReadonlyArray<number>} components The components of the vector, can be any size.
    */
-  static create<C extends AnyComponents>(
-    ...components: C
-  ): Vector<ArrayToNumber<C>> {
-    return new Vector<ArrayToNumber<C>>(
-      components as unknown as ArrayToNumber<C>
-    );
+  static create<A extends AnyComponents>(
+    ...components: A
+  ): Vector<A["length"]> {
+    return new Vector([...components] as Components<A["length"]>);
   }
 
   /**
-   * Raises the current x and y to given power(s)
+   * Raises the current components to given power(s)
    * @param  {...VectorArg} args If given a number, all components are raised to this. If given a Vector, the power operation is component-wise
    * @returns {this} this
    */
-  pow(...args: Array<VectorArg<C>>): this {
-    for (let arg of args) {
-      const [num, vec] = narrowArg(arg);
-      if (vec != null && !isSameSize(this, vec)) {
-        throw new IncompatibleVectors(
-          `Received an incompatible vector of size ${vec.size}`
+  pow(...args: Array<VectorArg<N>>): this {
+    for (const arg of args) {
+      if (isAnyVector(arg) && !isSameSize(this, arg)) {
+        throw new IncompatibleVector(
+          `Received an incompatible vector of size ${arg.size}`
         );
       }
-      for (const i in this.components) {
-        this.components[i] **= num ?? vec.components[i];
+      const components = toAnyComponents(this.components);
+      const argAccessor = vectorArgAccessor(arg, components.length as N);
+      for (let i = 0; i < components.length; i++) {
+        components[i] **= argAccessor(i);
       }
     }
     return this;
   }
 
   /**
-   * Adds the current x and y with given operand(s)
-   * @param  {...VectorArg} args If given a number, both components are added with this. If given a Vector, the add operation is component-wise
+   * Adds the current components with given operand(s)
+   * @param  {...VectorArg} args If given a number, all components are added with this. If given a Vector, the add operation is component-wise
    * @returns {this} this
    */
-  add(...args: Array<VectorArg<C>>): this {
-    for (let arg of args) {
-      const [num, vec] = narrowArg(arg);
-      if (vec != null && !isSameSize(this, vec)) {
-        throw new IncompatibleVectors(
-          `Received an incompatible vector of size ${vec.size}`
+  add(...args: Array<VectorArg<N>>): this {
+    for (const arg of args) {
+      if (isAnyVector(arg) && !isSameSize(this, arg)) {
+        throw new IncompatibleVector(
+          `Received an incompatible vector of size ${arg.size}`
         );
       }
-      for (const i in this.components) {
-        this.components[i] += num ?? vec.components[i];
+      const components = toAnyComponents(this.components);
+      const argAccessor = vectorArgAccessor(arg, components.length as N);
+      for (let i = 0; i < components.length; i++) {
+        components[i] += argAccessor(i);
       }
     }
     return this;
   }
 
   /**
-   * Subtracts given operand(s) from the current x and y
-   * @param  {...VectorArg} args If given a number, both components have the number taken away from them. If given a Vector, the subtract operation is component-wise
+   * Subtracts given operand(s) from the current components
+   * @param  {...VectorArg} args If given a number, all components have the number taken away from them. If given a Vector, the subtract operation is component-wise
    * @returns {this} this
    */
-  sub(...args: Array<VectorArg<C>>): this {
-    for (let arg of args) {
-      const [num, vec] = narrowArg(arg);
-      if (vec != null && !isSameSize(this, vec)) {
-        throw new IncompatibleVectors(
-          `Received an incompatible vector of size ${vec.size}`
+  sub(...args: Array<VectorArg<N>>): this {
+    for (const arg of args) {
+      if (isAnyVector(arg) && !isSameSize(this, arg)) {
+        throw new IncompatibleVector(
+          `Received an incompatible vector of size ${arg.size}`
         );
       }
-      for (const i in this.components) {
-        this.components[i] -= num ?? vec.components[i];
+      const components = toAnyComponents(this.components);
+      const argAccessor = vectorArgAccessor(arg, components.length as N);
+      for (let i = 0; i < components.length; i++) {
+        components[i] -= argAccessor(i);
       }
     }
     return this;
   }
 
   /**
-   * Multiplies the current x and y with given operand(s)
-   * @param  {...VectorArg} args If given a number, both components are multiplied by this. If given a Vector, the multiply operation is component-wise
+   * Multiplies the current components with given operand(s)
+   * @param  {...VectorArg} args If given a number, all components are multiplied by this. If given a Vector, the multiply operation is component-wise
    * @returns {this} this
    */
-  multiply(...args: Array<VectorArg<C>>): this {
-    for (let arg of args) {
-      const [num, vec] = narrowArg(arg);
-      if (vec != null && !isSameSize(this, vec)) {
-        throw new IncompatibleVectors(
-          `Received an incompatible vector of size ${vec.size}`
+  multiply(...args: Array<VectorArg<N>>): this {
+    for (const arg of args) {
+      if (isAnyVector(arg) && !isSameSize(this, arg)) {
+        throw new IncompatibleVector(
+          `Received an incompatible vector of size ${arg.size}`
         );
       }
-      for (const i in this.components) {
-        this.components[i] *= num ?? vec.components[i];
+      const components = toAnyComponents(this.components);
+      const argAccessor = vectorArgAccessor(arg, components.length as N);
+      for (let i = 0; i < components.length; i++) {
+        components[i] *= argAccessor(i);
       }
     }
     return this;
   }
 
   /**
-   * Divides the current x and y by the given operand(s)
-   * @param  {...VectorArg} args If given a number, both components are divided by this. If given a Vector, the divide operation is component-wise
+   * Divides the current components by the given operand(s)
+   * @param  {...VectorArg} args If given a number, all components are divided by this. If given a Vector, the divide operation is component-wise
    * @returns {this} this
    */
-  divide(...args: Array<VectorArg<C>>): this {
-    for (let arg of args) {
-      const [num, vec] = narrowArg(arg);
-      if (vec != null && !isSameSize(this, vec)) {
-        throw new IncompatibleVectors(
-          `Received an incompatible vector of size ${vec.size}`
+  divide(...args: Array<VectorArg<N>>): this {
+    for (const arg of args) {
+      if (isAnyVector(arg) && !isSameSize(this, arg)) {
+        throw new IncompatibleVector(
+          `Received an incompatible vector of size ${arg.size}`
         );
       }
-      for (const i in this.components) {
-        this.components[i] /= num ?? vec.components[i];
+      const components = toAnyComponents(this.components);
+      const argAccessor = vectorArgAccessor(arg, components.length as N);
+      for (let i = 0; i < components.length; i++) {
+        components[i] /= argAccessor(i);
       }
     }
     return this;
@@ -151,15 +153,16 @@ export default class Vector<const C extends AnyComponents> {
    * @param {number} t Between 0 and 1, where 0 is this current vector and 1 is the supplied other vector
    * @returns {Vector} Interpolated vector
    */
-  lerp(other: Vector<C>, t: number): Vector<C> {
+  lerp(other: Vector<N>, t: number): Vector<N> {
     if (isSameSize(this, other)) {
       return new Vector(
-        this.components.map(
-          (component, i) => component - (component - other.components[i]) * t
-        ) as C
+        toAnyComponents(this.components).map(
+          (component, i) =>
+            component - (component - toAnyComponents(other.components)[i]) * t
+        ) as Components<N>
       );
     } else {
-      throw new IncompatibleVectors(
+      throw new IncompatibleVector(
         `Received an incompatible vector of size ${other.size}`
       );
     }
@@ -170,14 +173,15 @@ export default class Vector<const C extends AnyComponents> {
    * @param {Vector} other Vector to dot product with
    * @returns {number} Dot product
    */
-  dot(other: Vector<C>): number {
+  dot(other: Vector<N>): number {
     if (isSameSize(this, other)) {
-      return this.components.reduce(
-        (acc, component, i) => acc + component * other.components[i],
+      return toAnyComponents(this.components).reduce(
+        (acc, component, i) =>
+          acc + component * toAnyComponents(other.components)[i],
         0
       );
     } else {
-      throw new IncompatibleVectors(
+      throw new IncompatibleVector(
         `Received an incompatible vector of size ${other.size}`
       );
     }
@@ -188,7 +192,15 @@ export default class Vector<const C extends AnyComponents> {
    * @returns {number}
    */
   sum(): number {
-    return this.components.reduce((acc, n) => acc + n);
+    return toAnyComponents(this.components).reduce((acc, n) => acc + n);
+  }
+
+  /**
+   * Returns the min of the components, whichever component is smaller
+   * @returns {number} the value of the smaller component
+   */
+  getMin(): number {
+    return Math.min(...toAnyComponents(this.components));
   }
 
   /**
@@ -196,14 +208,45 @@ export default class Vector<const C extends AnyComponents> {
    * @returns {number} the value of the bigger component
    */
   getMax(): number {
-    return Math.max(...this.components);
+    return Math.max(...toAnyComponents(this.components));
   }
+
   /**
-   * Returns the min of the components, whichever component is smaller
-   * @returns {number} the value of the smaller component
+   * Sets this vector's components to the the min between the incoming arg and this vector's components
+   * @param {VectorArg<N>} arg If given a number, it's used for all min operations. If given a Vector, the min operation is component-wise
+   * @returns {this} this
    */
-  getMin(): number {
-    return Math.min(...this.components);
+  min(arg: VectorArg<N>): this {
+    if (isAnyVector(arg) && !isSameSize(this, arg)) {
+      throw new IncompatibleVector(
+        `Received an incompatible vector of size ${arg.size}`
+      );
+    }
+    const components = toAnyComponents(this.components);
+    const argAccessor = vectorArgAccessor(arg, components.length as N);
+    for (let i = 0; i < components.length; i++) {
+      components[i] = Math.min(components[i], argAccessor(i));
+    }
+    return this;
+  }
+
+  /**
+   * Sets this vector's components to the the max between the incoming arg and this vector's components
+   * @param {VectorArg<N>} arg If given a number, it's used for all max operations. If given a Vector, the max operation is component-wise
+   * @returns {this} this
+   */
+  max(arg: VectorArg<N>): this {
+    if (isAnyVector(arg) && !isSameSize(this, arg)) {
+      throw new IncompatibleVector(
+        `Received an incompatible vector of size ${arg.size}`
+      );
+    }
+    const components = toAnyComponents(this.components);
+    const argAccessor = vectorArgAccessor(arg, components.length as N);
+    for (let i = 0; i < components.length; i++) {
+      components[i] = Math.max(components[i], argAccessor(i));
+    }
+    return this;
   }
 
   /**
@@ -212,18 +255,16 @@ export default class Vector<const C extends AnyComponents> {
    * @param {number} [y] Y component of the given coordinates
    * @returns {this} this
    */
-  setHead(...params: C | readonly [Vector<C>]): this {
-    if (!isNumber(params[0])) {
-      if (isSameSize(this, params[0])) {
-        this.components = [...params[0].components] as C;
-      } else {
-        throw new IncompatibleVectors(
-          `Received an incompatible vector of size ${params[0].size}`
-        );
-      }
-    } else {
-      this.components = params as C;
+  setHead(...params: AnyComponents | readonly [Vector<N>]): this {
+    const newComponents: AnyComponents = isArrayOf(isNumber)(params)
+      ? params
+      : toAnyComponents(params[0].components);
+    if (newComponents.length !== toAnyComponents(this.components).length) {
+      throw new IncompatibleVector(
+        `Received an incompatible vector of size ${newComponents.length}`
+      );
     }
+    this.components = newComponents as Components<N>;
     return this;
   }
 
@@ -232,7 +273,7 @@ export default class Vector<const C extends AnyComponents> {
    * @returns {number} Squared magnitude of this vector
    */
   getSquaredMagnitude(): number {
-    return this.components.reduce(
+    return toAnyComponents(this.components).reduce(
       (acc, component) => acc + component * component,
       0
     );
@@ -244,7 +285,10 @@ export default class Vector<const C extends AnyComponents> {
    */
   getMagnitude(): number {
     return Math.sqrt(
-      this.components.reduce((acc, component) => acc + component * component, 0)
+      toAnyComponents(this.components).reduce(
+        (acc, component) => acc + component * component,
+        0
+      )
     );
   }
 
@@ -254,16 +298,14 @@ export default class Vector<const C extends AnyComponents> {
    * @returns {this} this
    */
   setMagnitude(magnitude: number): this {
+    const components = toAnyComponents(this.components);
     const magnitudeRatio =
       magnitude /
       Math.sqrt(
-        this.components.reduce(
-          (acc, component) => acc + component * component,
-          0
-        )
+        components.reduce((acc, component) => acc + component * component, 0)
       );
-    for (const i in this.components) {
-      this.components[i] *= magnitudeRatio;
+    for (const i in components) {
+      components[i] *= magnitudeRatio;
     }
 
     return this;
@@ -273,12 +315,13 @@ export default class Vector<const C extends AnyComponents> {
    * Returns a new normalised version of this vector
    * @returns {Vector} Normalised vector
    */
-  getNorm(): Vector<C> {
+  getNorm(): Vector<N> {
+    const components = toAnyComponents(this.components);
     const magnitude = Math.sqrt(
-      this.components.reduce((acc, component) => acc + component * component, 0)
+      components.reduce((acc, component) => acc + component * component, 0)
     );
     return new Vector(
-      this.components.map((component) => component / magnitude) as C
+      components.map(component => component / magnitude) as Components<N>
     );
   }
 
@@ -287,11 +330,12 @@ export default class Vector<const C extends AnyComponents> {
    * @returns {this} this
    */
   normalise(): this {
+    const components = toAnyComponents(this.components);
     const magnitude = Math.sqrt(
-      this.components.reduce((acc, component) => acc + component * component, 0)
+      components.reduce((acc, component) => acc + component * component, 0)
     );
-    for (const i in this.components) {
-      this.components[i] /= magnitude;
+    for (const i in components) {
+      components[i] /= magnitude;
     }
     return this;
   }
@@ -301,8 +345,9 @@ export default class Vector<const C extends AnyComponents> {
    * @returns {this} this
    */
   abs(): this {
-    for (const i in this.components) {
-      this.components[i] = Math.abs(this.components[i]);
+    const components = toAnyComponents(this.components);
+    for (const i in components) {
+      components[i] = Math.abs(components[i]);
     }
     return this;
   }
@@ -311,18 +356,20 @@ export default class Vector<const C extends AnyComponents> {
    * Get the sign of each component in this vector
    * @returns {Vector} The signs of this vector where 1 >= 0 and -1 < 0
    */
-  getSign(): Vector<C> {
+  getSign(): Vector<N> {
     return new Vector(
-      this.components.map((component) => (component >= 0 ? 1 : -1)) as C
+      toAnyComponents(this.components).map(component =>
+        component >= 0 ? 1 : -1
+      ) as Components<N>
     );
   }
 
   /**
    * Gets the angle of this vector
-   * @type {Vector<Components2D>}
+   * @type {Vector<2>}
    * @returns {number} Angle between 0 and 2 * PI
    */
-  getAngle(this: Vector<Components2D>): number {
+  getAngle(this: Vector<2>): number {
     if (is2D(this.components)) {
       const [x, y] = this.components;
 
@@ -330,9 +377,9 @@ export default class Vector<const C extends AnyComponents> {
       if (x === 0 && y === 0) out = 0;
       else if (y === 0) out = x > 0 ? 0 : Math.PI;
       else if (x === 0) out = y > 0 ? Math.PI / 2 : (Math.PI * 3) / 2;
-      else if (x > 0 && y > 0) out = Math.atan(y / x);
-      else if (x > 0) out = (Math.PI * 3) / 2 + Math.atan(x / -y);
+      else if (x > 0 && y > 0) out = Math.PI / 2 - Math.atan(x / y);
       else if (y > 0) out = Math.PI - Math.atan(y / -x);
+      else if (x > 0) out = (Math.PI * 3) / 2 + Math.atan(x / -y);
       else out = (Math.PI * 3) / 2 - Math.atan(x / y);
 
       return out;
@@ -347,10 +394,7 @@ export default class Vector<const C extends AnyComponents> {
    * @param {number} angle Angle to set to
    * @returns {this} this
    */
-  setAngle(
-    this: Vector<Components2D>,
-    angle: number
-  ): ThisType<Vector<Components2D>> {
+  setAngle(this: Vector<2>, angle: number): ThisType<Vector<2>> {
     if (is2D(this.components)) {
       const [x, y] = this.components;
 
@@ -366,16 +410,16 @@ export default class Vector<const C extends AnyComponents> {
 
   /**
    * Rotates this vector about a pivot
-   * @type {Vector<Components2D>}
+   * @type {Vector<2>}
    * @param {Vector} pivot Pivot to rotate around
    * @param {number} angle Angle to rotate by
    * @returns {this} this
    */
   rotate(
-    this: Vector<Components2D>,
-    pivot: Vector<Components2D>,
+    this: Vector<2>,
+    pivot: Vector<2>,
     angle: number
-  ): ThisType<Vector<Components2D>> {
+  ): ThisType<Vector<2>> {
     if (is2D(this.components)) {
       if (isSameSize(this, pivot)) {
         const [x, y] = this.components;
@@ -384,14 +428,14 @@ export default class Vector<const C extends AnyComponents> {
         const dy = y - py;
         const dMag = Math.sqrt(dx * dx + dy * dy);
 
-        let currAngle;
-        if (dx === 0 && dy === 0) currAngle = 0;
-        else if (dy === 0) currAngle = dx > 0 ? 0 : Math.PI;
-        else if (dx === 0) currAngle = dy > 0 ? Math.PI / 2 : (Math.PI * 3) / 2;
-        else if (dx > 0 && dy > 0) currAngle = Math.atan(dy / dx);
-        else if (dx > 0) currAngle = (Math.PI * 3) / 2 + Math.atan(dx / -dy);
-        else if (dy > 0) currAngle = Math.PI - Math.atan(dy / -dx);
-        else currAngle = (Math.PI * 3) / 2 - Math.atan(dx / dy);
+        let currAngle: number;
+        if (x === 0 && y === 0) currAngle = 0;
+        else if (y === 0) currAngle = x > 0 ? 0 : Math.PI;
+        else if (x === 0) currAngle = y > 0 ? Math.PI / 2 : (Math.PI * 3) / 2;
+        else if (x > 0 && y > 0) currAngle = Math.PI / 2 - Math.atan(x / y);
+        else if (y > 0) currAngle = Math.PI - Math.atan(y / -x);
+        else if (x > 0) currAngle = (Math.PI * 3) / 2 + Math.atan(x / -y);
+        else currAngle = (Math.PI * 3) / 2 - Math.atan(x / y);
 
         const oX = dMag * Math.cos(currAngle + angle);
         const oY = dMag * Math.sin(currAngle + angle);
@@ -401,7 +445,7 @@ export default class Vector<const C extends AnyComponents> {
 
         return this;
       } else {
-        throw new IncompatibleVectors(
+        throw new IncompatibleVector(
           `Received an incompatible vector of size ${pivot.size}`
         );
       }
@@ -412,25 +456,22 @@ export default class Vector<const C extends AnyComponents> {
 
   /**
    * Cross product of this vector and another
-   * @param {Vector<Components3D>} this
-   * @param {Vector<Components3D>} other
-   * @returns {Vector<Components3D>} The resulting cross product vector of this and the other vector
+   * @param {Vector<3>} this
+   * @param {Vector<3>} other
+   * @returns {Vector<3>} The resulting cross product vector of this and the other vector
    */
-  crossProduct(
-    this: Vector<Components3D>,
-    other: Vector<Components3D>
-  ): Vector<Components3D> {
+  crossProduct(this: Vector<3>, other: Vector<3>): Vector<3> {
     if (is3D(this.components)) {
       if (isSameSize(this, other)) {
         const a = this.components;
         const b = other.components;
-        return new Vector<Components3D>([
+        return new Vector([
           a[1] * b[2] - a[2] * b[1],
           a[2] * b[0] - a[0] * b[2],
           a[0] * b[1] - a[1] * b[0],
         ]);
       } else {
-        throw new IncompatibleVectors(
+        throw new IncompatibleVector(
           `Received an incompatible vector of size ${other.size}`
         );
       }
@@ -443,12 +484,15 @@ export default class Vector<const C extends AnyComponents> {
    * Copies this vector into a duplicate
    * @returns {Vector} Duplicated version of this vector
    */
-  copy(): Vector<C> {
-    return new Vector([...this.components] as C);
+  copy(): Vector<N> {
+    return new Vector([...this.components] as Components<N>);
   }
 
+  /**
+   * The size of this vector
+   */
   get size(): number {
-    return this.components.length;
+    return toAnyComponents(this.components).length;
   }
 
   /**
@@ -456,16 +500,16 @@ export default class Vector<const C extends AnyComponents> {
    * @returns {number}
    */
   x(): number {
-    return this.components[0];
+    return toAnyComponents(this.components)[0];
   }
 
   /**
    * Get the value of the second component in this vector
    * @returns {number}
    */
-  y(this: Vector<MinSize<Components2D>>): number {
+  y(this: MinSizeComponents<2, N>): number {
     if (isMin2D(this.components)) {
-      return this.components[1];
+      return toAnyComponents(this.components)[1];
     } else {
       throw new IncompatibleOperation("Requires at least a 2D vector");
     }
@@ -475,9 +519,9 @@ export default class Vector<const C extends AnyComponents> {
    * Get the value of the third component in this vector
    * @returns {number}
    */
-  z(this: Vector<MinSize<Components3D>>): number {
+  z(this: MinSizeComponents<3, N>): number {
     if (isMin3D(this.components)) {
-      return this.components[2];
+      return toAnyComponents(this.components)[2];
     } else {
       throw new IncompatibleOperation("Requires at least a 3D vector");
     }
@@ -487,9 +531,9 @@ export default class Vector<const C extends AnyComponents> {
    * Get the value of the fourth component in this vector
    * @returns {number}
    */
-  w(this: Vector<MinSize<Components4D>>): number {
+  w(this: MinSizeComponents<4, N>): number {
     if (isMin4D(this.components)) {
-      return this.components[3];
+      return toAnyComponents(this.components)[3];
     } else {
       throw new IncompatibleOperation("Requires at least a 4D vector");
     }
@@ -501,18 +545,68 @@ export default class Vector<const C extends AnyComponents> {
    * @returns {number}
    */
   valueOf(index: number): number {
-    const value = this.components[index];
+    const components = toAnyComponents(this.components);
+    const value = components[index];
     if (value != null) {
       return value;
     } else {
       throw new OutOfBounds(
-        `Index ${index} out of bounds for vector of size ${this.components.length}`
+        `Index ${index} out of bounds for vector of size ${components.length}`
       );
     }
   }
 
-  toArray(): C {
-    return [...this.components] as C;
+  /**
+   * Calls array.forEach on the components of this vector
+   * @param {Function} callback Function to run for each component
+   * @param {ThisType<unknown>} thisArg Optional this argument
+   */
+  forEach(
+    callback: (value: number, index: number, array: number[]) => number,
+    thisArg?: ThisType<unknown>
+  ): void {
+    toAnyComponents(this.components).forEach(callback, thisArg);
+  }
+
+  /**
+   * Calls array.map on the components of this vector
+   * @param {Function} mapper Function to run for each component
+   * @param {ThisType<unknown>} thisArg Optional this argument
+   */
+  map(
+    mapper: (value: number, index: number, array: number[]) => number,
+    thisArg?: ThisType<unknown>
+  ): Vector<N> {
+    return new Vector(
+      toAnyComponents(this.components).map(mapper, thisArg) as Components<N>
+    );
+  }
+
+  /**
+   * Calls array.reduce on the components of this vector
+   * @param {Function} reductionFn Function to run for each component
+   * @param {number} initialValue Optional initial value
+   */
+  reduce(
+    reductionFn: (
+      accumulator: number,
+      value: number,
+      index: number,
+      array: number[]
+    ) => number,
+    initialValue?: number
+  ): number {
+    return initialValue != null
+      ? toAnyComponents(this.components).reduce(reductionFn, initialValue)
+      : toAnyComponents(this.components).reduce(reductionFn);
+  }
+
+  /**
+   * Converts this vector to an array
+   * @returns The vector's components as an array
+   */
+  toArray(): Components<N> {
+    return [...toAnyComponents(this.components)] as Components<N>;
   }
 
   /**
@@ -520,25 +614,35 @@ export default class Vector<const C extends AnyComponents> {
    * @param {Vector} other
    * @returns {boolean} If they are equal
    */
-  equals(other: Vector<AnyComponents>): boolean {
+  equals(other: Vector<number>): boolean {
     return (
       isSameSize(this, other) &&
-      this.components.every((component, i) => component === other.components[i])
+      toAnyComponents(this.components).every(
+        (component, i) => component === other.components[i]
+      )
     );
   }
 
-  toString(): string {
-    return `Vector${this.size}D[${this.components.join(", ")}]`;
+  /**
+   * Converts this vector to a string in the format: "VectorND[component1, component2, ...]"
+   * @returns the formatted string
+   */
+  toString(fractionDigits?: number): string {
+    const components = toAnyComponents(this.components);
+    return `Vector${components.length}D[${(fractionDigits != null
+      ? components.map(n => n.toFixed(fractionDigits))
+      : components
+    ).join(", ")}]`;
   }
 
   /**
    * Parses a string and tries to make a vector out of it
    * @param {string} str Vector string in the format of "VectorND[component1, component2, ...]"
-   * @returns {(Vector|undefined)} A vector if the x and y components have been found, else void
+   * @returns {(Vector|undefined)} The parsed vector if it's valid, otherwise undefined.
    */
-  static parseString(str: string): Vector<AnyComponents> | undefined {
-    const match = /^Vector\d+D\[([^\]]+)\]$/.exec(str);
-    const components = match != null ? match[1].split(", ").map(Number) : null;
+  static parseString(str: string): Vector<undefined> | undefined {
+    const match = /^Vector\d+D\[(?<components>[^\]]+)\]$/.exec(str);
+    const components = match?.groups?.components.split(", ").map(Number);
     if (isComponents(components)) {
       return new Vector(components);
     } else {
@@ -546,33 +650,84 @@ export default class Vector<const C extends AnyComponents> {
     }
   }
 
-  static ZERO<N extends number>(size: N): Vector<ComponentsND<N>> {
-    return new Vector<ComponentsND<N>>(
-      new Array(size).fill(0) as ComponentsND<N>
-    );
+  /**
+   * Guard function used to narrow a parsed Vector
+   * @param size the size to narrow to
+   * @returns true if the size of the parsed vector is the given size, false otherwise
+   */
+  isSize<const S extends number>(
+    this: Vector<undefined>,
+    size: S
+  ): this is Vector<S> {
+    return toAnyComponents(this.components).length === size;
   }
-  static ONE<N extends number>(size: N): Vector<ComponentsND<N>> {
-    return new Vector<ComponentsND<N>>(
-      new Array(size).fill(1) as ComponentsND<N>
+
+  /**
+   * Returns a vector with N number of components, all mapped on a unit circle (or the N dimensional equivalent).
+   * @param size Number of components to return
+   * @returns Random normalised vector.
+   */
+  static randomPointOnUnitCircle<N extends number>(size: N): Vector<N> {
+    const components = new Array(size)
+      .fill(undefined)
+      .map(() => Math.random() - 0.5);
+    const magnitude = Math.sqrt(
+      components.reduce((acc, component) => acc + component * component, 0)
+    );
+    return new Vector(
+      components.map(component => component / magnitude) as Components<N>
     );
   }
 
-  static get RIGHT(): Vector<Components2D> {
-    return new Vector<Components2D>([1, 0]);
+  /**
+   * Creates a new vector filled with 0s
+   * @param size How many components the vector should have
+   * @returns The created vector
+   */
+  static ZERO<N extends number>(size: N): Vector<N> {
+    return new Vector(new Array(size).fill(0) as Components<N>);
   }
-  static get LEFT(): Vector<Components2D> {
-    return new Vector<Components2D>([-1, 0]);
+
+  /**
+   * Creates a new vector filled with 1s
+   * @param size How many components the vector should have
+   * @returns The created vector
+   */
+  static ONE<N extends number>(size: N): Vector<N> {
+    return new Vector(new Array(size).fill(1) as Components<N>);
   }
-  static get DOWN(): Vector<Components2D> {
-    return new Vector<Components2D>([0, 1]);
+
+  /**
+   * Shorthand for creating a vector with [1, 0] as it's components. Useful for doing things with the canvas
+   */
+  static get RIGHT(): Vector<2> {
+    return new Vector([1, 0]);
   }
-  static get UP(): Vector<Components2D> {
-    return new Vector<Components2D>([0, -1]);
+
+  /**
+   * Shorthand for creating a vector with [-1, 0] as it's components. Useful for doing things with the canvas
+   */
+  static get LEFT(): Vector<2> {
+    return new Vector([-1, 0]);
+  }
+
+  /**
+   * Shorthand for creating a vector with [0, 1] as it's components. Useful for doing things with the canvas
+   */
+  static get DOWN(): Vector<2> {
+    return new Vector([0, 1]);
+  }
+
+  /**
+   * Shorthand for creating a vector with [0, -1] as it's components. Useful for doing things with the canvas
+   */
+  static get UP(): Vector<2> {
+    return new Vector([0, -1]);
   }
 }
 
 try {
   TimeAnalysis.registerMethods(Vector);
-} catch {}
-
-export type { Components2D, Components3D, Components4D };
+} catch (ex) {
+  console.error(ex);
+}

@@ -1,5 +1,5 @@
 import dom from "../core/dom";
-import { filterAndMap, replaceItem } from "../core/utils";
+import { filterAndMap } from "../core/utils";
 import { inputType } from "./create";
 import { DeriveDefaults, DeriveStateType } from "./derive";
 import { changeCallback, inputCallback, inputValue } from "./event";
@@ -14,16 +14,10 @@ import {
   StateItem,
 } from "./types";
 
-function setAttributes(
-  el: HTMLElement,
-  attrs: Record<string, string>
-): HTMLElement {
-  if (attrs) {
-    for (let attr in attrs) {
-      el.setAttribute(attr, attrs[attr]);
-    }
+function setAttributes(el: HTMLElement, attrs: Record<string, string>): void {
+  for (const attr in attrs) {
+    el.setAttribute(attr, attrs[attr]);
   }
-  return el;
 }
 
 function initCollectionRowHtml<F extends ConfigCollectionFields>(
@@ -46,7 +40,7 @@ function initCollectionRowHtml<F extends ConfigCollectionFields>(
       config,
       rowValues[i],
       () => getCurrentValue()[i],
-      (newValue) => {
+      newValue => {
         onUpdate(
           getCurrentValue().map((oldValue, j) =>
             i === j ? newValue : oldValue
@@ -84,7 +78,7 @@ function initCollectionHtml<I extends string, F extends ConfigCollectionFields>(
                 }
                 ${config.fields
                   .map(
-                    (childConfig) =>
+                    childConfig =>
                       `<th scope="col" >${
                         isSerialisable(childConfig) ? childConfig.label : ""
                       }</th>`
@@ -128,13 +122,11 @@ function initCollectionHtml<I extends string, F extends ConfigCollectionFields>(
           }
         }
       );
-      for (let id in idLookup) {
+      for (const id in idLookup) {
         if (indicesToDelete.includes(idLookup[id])) {
           delete idLookup[id];
         } else {
-          idLookup[id] -= indicesToDelete.filter(
-            (i) => i < idLookup[id]
-          ).length;
+          idLookup[id] -= indicesToDelete.filter(i => i < idLookup[id]).length;
         }
       }
       onUpdate(
@@ -150,13 +142,13 @@ function initCollectionHtml<I extends string, F extends ConfigCollectionFields>(
       const rowValues = initCollectionRowHtml(
         dom.get("tbody", collection),
         config,
-        config.fields.map((field) => field.default) as DeriveDefaults<F>,
+        config.fields.map(field => field.default) as DeriveDefaults<F>,
         () => getCurrentValue()[idLookup[rowId]],
-        (newRow) =>
+        newRow =>
           onUpdate(
-            replaceItem(
-              getCurrentValue(),
+            getCurrentValue().toSpliced(
               idLookup[rowId],
+              1,
               newRow
             ) as DeriveStateType<typeof config>
           )
@@ -174,11 +166,11 @@ function initCollectionHtml<I extends string, F extends ConfigCollectionFields>(
         config,
         row,
         () => getCurrentValue()[idLookup[rowId]],
-        (newRow) =>
+        newRow =>
           onUpdate(
-            replaceItem(
-              getCurrentValue(),
+            getCurrentValue().toSpliced(
               idLookup[rowId],
+              1,
               newRow
             ) as DeriveStateType<typeof config>
           )
@@ -200,9 +192,7 @@ function initHtml<C extends ConfigPart<string>>(
     case "Button": {
       const inp = document.createElement("button");
       if (config.attrs != null) {
-        Object.entries(config.attrs).forEach(([attr, value]) =>
-          inp.setAttribute(attr, value)
-        );
+        setAttributes(inp, config.attrs);
       }
       inp.type = "button";
       if (hasId) {
@@ -227,9 +217,7 @@ function initHtml<C extends ConfigPart<string>>(
     case "File": {
       const inp = document.createElement("input");
       if (config.attrs != null) {
-        Object.entries(config.attrs).forEach(([attr, value]) =>
-          inp.setAttribute(attr, value)
-        );
+        setAttributes(inp, config.attrs);
       }
       if (hasId) {
         inp.setAttribute("id", config.id);
@@ -256,16 +244,14 @@ function initHtml<C extends ConfigPart<string>>(
     case "Select": {
       const inp = document.createElement("select");
       if (config.attrs != null) {
-        Object.entries(config.attrs).forEach(([attr, value]) =>
-          inp.setAttribute(attr, value)
-        );
+        setAttributes(inp, config.attrs);
       }
       if (hasId) {
         inp.setAttribute("id", config.id);
       }
       inp.className = "form-select";
 
-      config.options?.forEach((option) => {
+      config.options?.forEach(option => {
         const el = document.createElement("option");
         el.value = option;
         el.innerText = option;
@@ -280,9 +266,7 @@ function initHtml<C extends ConfigPart<string>>(
     default: {
       const inp = document.createElement("input");
       if (config.attrs != null) {
-        Object.entries(config.attrs).forEach(([attr, value]) =>
-          inp.setAttribute(attr, value)
-        );
+        setAttributes(inp, config.attrs);
       }
 
       if (hasId) {
@@ -344,11 +328,6 @@ export function initStateItem<C extends ConfigPart<string>>(
     label.setAttribute("title", config.label);
     label.className = "wrap-text";
     label.innerText = config.label;
-    // if (config.tooltip != null) {
-    //   label.setAttribute("data-toggle", "tooltip");
-    //   label.setAttribute("data-placement", "top");
-    //   label.setAttribute("title", config.tooltip).tooltip();
-    // }
     container.appendChild(label);
   }
 
