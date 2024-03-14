@@ -1,7 +1,6 @@
 import Monad from "../core/monad";
 import { AppContextWithState, appMethods } from "../core/types";
 import Vector from "../core/Vector";
-import { Components } from "../core/Vector/types";
 import config from "./config";
 
 interface Star {
@@ -193,7 +192,7 @@ function animationFrame({
   ctx.beginPath();
 
   // point components are either 0 or 1
-  const processCubeCorner = (point: Vector<3>) =>
+  const processCubeCorner = (point: Vector<3>): Vector<2> =>
     Monad.from(point)
       .map(point => {
         const [x, y, z] = point.copy().sub(0.5).toArray();
@@ -212,11 +211,7 @@ function animationFrame({
       const cornerPoint = Vector.create(i, j, (i + j) % 2);
       const projectedCornerPoint = processCubeCorner(cornerPoint);
       for (let k = 0; k < 3; k++) {
-        const toPoint = Vector.create(
-          ...(cornerPoint
-            .toArray()
-            .toSpliced(k, 1, (cornerPoint.valueOf(k) + 1) % 2) as Components<3>)
-        );
+        const toPoint = cornerPoint.with(k, (cornerPoint.valueOf(k) + 1) % 2);
         const projectedToPoint = processCubeCorner(toPoint);
 
         if (
