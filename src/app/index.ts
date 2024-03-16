@@ -48,12 +48,12 @@ function project(
   const yAxis = dirNorm.crossProduct(xAxis);
 
   const screenStart = {
-    x: screenCenterPos.copy().sub(xAxis.copy().multiply(1 / 2)),
-    y: screenCenterPos.copy().sub(yAxis.copy().multiply(1 / 2)),
+    x: screenCenterPos.copy().sub(xAxis.copy().divide(2)),
+    y: screenCenterPos.copy().sub(yAxis.copy().divide(2)),
   };
   const screenEnd = {
-    x: screenCenterPos.copy().add(xAxis.copy().multiply(1 / 2)),
-    y: screenCenterPos.copy().add(yAxis.copy().multiply(1 / 2)),
+    x: screenCenterPos.copy().add(xAxis.copy().divide(2)),
+    y: screenCenterPos.copy().add(yAxis.copy().divide(2)),
   };
 
   const [xAxisIntersection, onXAxis] = intersect(

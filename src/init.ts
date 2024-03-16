@@ -68,9 +68,7 @@ dom.addListener(
   }
 );
 
-function initStateful<S extends object>(
-  app: StatefulAppMethods<typeof config, S>
-) {
+function initStateful<S>(app: StatefulAppMethods<typeof config, S>) {
   let state = app.init(appContext);
 
   window.onresize = evt => {

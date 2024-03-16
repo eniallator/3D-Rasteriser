@@ -16,17 +16,12 @@ export interface AppContext<A extends Array<ConfigPart<string>>> {
   };
 }
 
-export interface AppContextWithState<
-  A extends Array<ConfigPart<string>>,
-  S extends object,
-> extends AppContext<A> {
+export interface AppContextWithState<A extends Array<ConfigPart<string>>, S>
+  extends AppContext<A> {
   state: S;
 }
 
-export interface StatefulAppMethods<
-  A extends Array<ConfigPart<string>>,
-  S extends object,
-> {
+export interface StatefulAppMethods<A extends Array<ConfigPart<string>>, S> {
   type: "stateful";
   init: (this: StatefulAppMethods<A, S>, appContext: AppContext<A>) => S;
   animationFrame?: (
@@ -54,13 +49,12 @@ export interface StatelessAppMethods<A extends Array<ConfigPart<string>>> {
   ) => void;
 }
 
-export type AppMethods<
-  A extends Array<ConfigPart<string>>,
-  S extends object = never,
-> = StatefulAppMethods<A, S> | StatelessAppMethods<A>;
+export type AppMethods<A extends Array<ConfigPart<string>>, S = never> =
+  | StatefulAppMethods<A, S>
+  | StatelessAppMethods<A>;
 
 export const appMethods = {
-  stateful: <A extends Array<ConfigPart<string>>, const S extends object>(
+  stateful: <A extends Array<ConfigPart<string>>, const S>(
     methods: Omit<StatefulAppMethods<A, S>, "type">
   ): AppMethods<A, S> => ({ type: "stateful", ...methods }),
   stateless: <A extends Array<ConfigPart<string>>>(
