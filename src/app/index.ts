@@ -32,14 +32,16 @@ function intersect(
 }
 
 function project(
+  viewPos: Vector<3>,
   dirNorm: Vector<3>,
   point: Vector<3>,
   fov: number,
   aspectRatio: number
 ): [Vector<2>, boolean] {
-  const pointInView = point.dot(dirNorm) > 0;
+  const offsettedPoint = point.copy().sub(viewPos);
+  const pointInView = offsettedPoint.dot(dirNorm) > 0;
   const screenCenterPos = dirNorm.copy().setMagnitude(1 / fov);
-  const pointNorm = point.getNorm();
+  const pointNorm = offsettedPoint.getNorm();
   const t =
     screenCenterPos.multiply(dirNorm).sum() /
     pointNorm.copy().multiply(dirNorm).sum();
@@ -204,6 +206,11 @@ function animationFrame({
       .map(point => point.add(cubeCenter))
       .map(point =>
         project(
+          Vector.create(
+            -1,
+            Math.cos(time.now - time.animationStart),
+            Math.sin(time.now - time.animationStart)
+          ),
           dirNorm,
           point,
           paramConfig.getVal("fov"),
