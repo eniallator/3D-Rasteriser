@@ -3,10 +3,10 @@ import { AppContextWithState, appMethods } from "../core/types";
 import Vector from "../core/Vector";
 import config from "./config";
 
-interface Star {
-  pos: Vector<3>;
-  tail: Array<Vector<3>>;
-}
+// interface Star {
+//   pos: Vector<3>;
+//   tail: Array<Vector<3>>;
+// }
 
 // interface StarState {
 //   stars: Array<Star>;
@@ -184,12 +184,8 @@ function animationFrame({
   const screenDim = Vector.create(canvas.width, canvas.height);
   const cubeAngle =
     (((time.now - time.animationStart) * paramConfig.getVal("speed")) / 100) %
-    (Math.PI / 2);
+    (Math.PI * 2);
   const cubeCenter = Vector.create(1.5, 0, 0);
-
-  ctx.lineWidth = (screenDim.getMin() / 100) * paramConfig.getVal("star-size");
-  ctx.lineCap = "round";
-  ctx.beginPath();
 
   // point components are either 0 or 1
   const processCubeCorner = (point: Vector<3>): Vector<2> =>
@@ -206,6 +202,9 @@ function animationFrame({
       .map(([point]) => point.add(0.5).multiply(screenDim))
       .value();
 
+  ctx.lineWidth = (screenDim.getMin() / 100) * paramConfig.getVal("star-size");
+  ctx.lineCap = "round";
+
   for (let i = 0; i < 2; i++) {
     for (let j = 0; j < 2; j++) {
       const cornerPoint = Vector.create(i, j, (i + j) % 2);
@@ -218,13 +217,27 @@ function animationFrame({
           !projectedCornerPoint.some(isNaN) &&
           !projectedToPoint.some(isNaN)
         ) {
+          const gradient = ctx.createLinearGradient(
+            ...projectedCornerPoint.toArray(),
+            ...projectedToPoint.toArray()
+          );
+          gradient.addColorStop(
+            0,
+            `rgb(${cornerPoint.copy().multiply(256).toArray().join(", ")})`
+          );
+          gradient.addColorStop(
+            1,
+            `rgb(${toPoint.copy().multiply(256).toArray().join(", ")})`
+          );
+          ctx.beginPath();
+          ctx.strokeStyle = gradient;
           ctx.moveTo(...projectedCornerPoint.toArray());
           ctx.lineTo(...projectedToPoint.toArray());
+          ctx.stroke();
         }
       }
     }
   }
-  ctx.stroke();
 
   return { dirNorm };
 }
