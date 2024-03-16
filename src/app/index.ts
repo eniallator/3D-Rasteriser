@@ -2,6 +2,8 @@ import Monad from "../core/monad";
 import { AppContextWithState, appMethods } from "../core/types";
 import Vector from "../core/Vector";
 import config from "./config";
+import rasterise from "./rasterise";
+import { line, Renderable } from "./rasterise/types";
 
 // interface Star {
 //   pos: Vector<3>;
@@ -16,66 +18,6 @@ import config from "./config";
 
 interface CubeState {
   dirNorm: Vector<3>;
-}
-
-function intersect(
-  vecA: Vector<3>,
-  vecB: Vector<3>,
-  point: Vector<3>
-): [Vector<3>, boolean] {
-  const a = vecA.copy().sub(point).getMagnitude();
-  const b = vecB.copy().sub(point).getMagnitude();
-  const c = vecA.copy().sub(vecB).getMagnitude();
-
-  const t = (b ** 2 - a ** 2 + c ** 2) / (2 * c);
-  return [vecA.lerp(vecB, t), 0 <= t && t <= 1];
-}
-
-function project(
-  viewPos: Vector<3>,
-  dirNorm: Vector<3>,
-  point: Vector<3>,
-  fov: number,
-  aspectRatio: number
-): [Vector<2>, boolean] {
-  const offsettedPoint = point.copy().sub(viewPos);
-  const pointInView = offsettedPoint.dot(dirNorm) > 0;
-  const screenCenterPos = dirNorm.copy().setMagnitude(1 / fov);
-  const pointNorm = offsettedPoint.getNorm();
-  const t =
-    screenCenterPos.multiply(dirNorm).sum() /
-    pointNorm.copy().multiply(dirNorm).sum();
-  const pointOnPlane = pointNorm.multiply(t);
-  const xAxis = dirNorm.crossProduct(Vector.create(0, 1, 0));
-  const yAxis = dirNorm.crossProduct(xAxis);
-
-  const screenStart = {
-    x: screenCenterPos.copy().sub(xAxis.copy().divide(2)),
-    y: screenCenterPos.copy().sub(yAxis.copy().divide(2)),
-  };
-  const screenEnd = {
-    x: screenCenterPos.copy().add(xAxis.copy().divide(2)),
-    y: screenCenterPos.copy().add(yAxis.copy().divide(2)),
-  };
-
-  const [xAxisIntersection, onXAxis] = intersect(
-    screenStart.x,
-    screenEnd.x,
-    pointOnPlane
-  );
-  const [yAxisIntersection, onYAxis] = intersect(
-    screenStart.y,
-    screenEnd.y,
-    pointOnPlane
-  );
-
-  return [
-    Vector.create(
-      xAxisIntersection.divide(aspectRatio).dot(xAxis),
-      yAxisIntersection.dot(yAxis)
-    ),
-    pointInView && onXAxis && onYAxis,
-  ];
 }
 
 // function createStar(boxSize: number): Star {
@@ -194,7 +136,7 @@ function animationFrame({
   const cubeCenter = Vector.create(1.5, 0, 0);
 
   // point components are either 0 or 1
-  const processCubeCorner = (point: Vector<3>): Vector<2> =>
+  const processCubeCorner = (point: Vector<3>): Vector<3> =>
     Monad.from(point)
       .map(point => {
         const [x, y, z] = point.copy().sub(0.5).toArray();
@@ -204,58 +146,44 @@ function animationFrame({
         return Vector.create(rotX, rotY, z);
       })
       .map(point => point.add(cubeCenter))
-      .map(point =>
-        project(
-          Vector.create(
-            -1,
-            Math.cos(time.now - time.animationStart),
-            Math.sin(time.now - time.animationStart)
-          ),
-          dirNorm,
-          point,
-          paramConfig.getVal("fov"),
-          canvas.width / canvas.height
-        )
-      )
-      .map(([point]) => point.add(0.5).multiply(screenDim))
       .value();
 
   ctx.lineWidth = (screenDim.getMin() / 100) * paramConfig.getVal("star-size");
-  ctx.lineCap = "round";
+
+  const renderables: Renderable[] = [];
 
   for (let i = 0; i < 2; i++) {
     for (let j = 0; j < 2; j++) {
       const cornerPoint = Vector.create(i, j, (i + j) % 2);
-      const projectedCornerPoint = processCubeCorner(cornerPoint);
       for (let k = 0; k < 3; k++) {
         const toPoint = cornerPoint.with(k, (cornerPoint.valueOf(k) + 1) % 2);
-        const projectedToPoint = processCubeCorner(toPoint);
+        const halfwayPoint = cornerPoint.lerp(toPoint, 0.5);
 
-        if (
-          !projectedCornerPoint.some(isNaN) &&
-          !projectedToPoint.some(isNaN)
-        ) {
-          const gradient = ctx.createLinearGradient(
-            ...projectedCornerPoint.toArray(),
-            ...projectedToPoint.toArray()
-          );
-          gradient.addColorStop(
-            0,
-            `rgb(${cornerPoint.copy().multiply(256).toArray().join(", ")})`
-          );
-          gradient.addColorStop(
-            1,
-            `rgb(${toPoint.copy().multiply(256).toArray().join(", ")})`
-          );
-          ctx.beginPath();
-          ctx.strokeStyle = gradient;
-          ctx.moveTo(...projectedCornerPoint.toArray());
-          ctx.lineTo(...projectedToPoint.toArray());
-          ctx.stroke();
-        }
+        renderables.push(
+          line({
+            points: [
+              processCubeCorner(cornerPoint),
+              processCubeCorner(toPoint),
+            ],
+            style: `rgb(${halfwayPoint.multiply(256).toArray().join(", ")})`,
+          })
+        );
       }
     }
   }
+
+  rasterise.render(
+    ctx,
+    renderables,
+    Vector.create(
+      -1,
+      Math.cos(time.now - time.animationStart),
+      Math.sin(time.now - time.animationStart)
+    ),
+    dirNorm,
+    paramConfig.getVal("fov"),
+    Vector.create(canvas.width, canvas.height)
+  );
 
   return { dirNorm };
 }
