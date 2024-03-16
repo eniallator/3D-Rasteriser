@@ -4,7 +4,7 @@ export default config(
   rangeConfig({
     id: "fov",
     label: "Field of vision",
-    default: 2,
+    default: 1.5,
     attrs: {
       min: "0.2",
       max: "50",

@@ -34,7 +34,8 @@ function intersect(
 function project(
   dirNorm: Vector<3>,
   point: Vector<3>,
-  fov: number
+  fov: number,
+  aspectRatio: number
 ): [Vector<2>, boolean] {
   const pointInView = point.dot(dirNorm) > 0;
   const screenCenterPos = dirNorm.copy().setMagnitude(1 / fov);
@@ -47,8 +48,8 @@ function project(
   const yAxis = dirNorm.crossProduct(xAxis);
 
   const screenStart = {
-    x: screenCenterPos.copy().add(xAxis.copy().multiply(-1 / 2)),
-    y: screenCenterPos.copy().add(yAxis.copy().multiply(-1 / 2)),
+    x: screenCenterPos.copy().sub(xAxis.copy().multiply(1 / 2)),
+    y: screenCenterPos.copy().sub(yAxis.copy().multiply(1 / 2)),
   };
   const screenEnd = {
     x: screenCenterPos.copy().add(xAxis.copy().multiply(1 / 2)),
@@ -67,7 +68,10 @@ function project(
   );
 
   return [
-    Vector.create(xAxisIntersection.dot(xAxis), yAxisIntersection.dot(yAxis)),
+    Vector.create(
+      xAxisIntersection.divide(aspectRatio).dot(xAxis),
+      yAxisIntersection.dot(yAxis)
+    ),
     pointInView && onXAxis && onYAxis,
   ];
 }
@@ -198,7 +202,14 @@ function animationFrame({
         return Vector.create(rotX, rotY, z);
       })
       .map(point => point.add(cubeCenter))
-      .map(point => project(dirNorm, point, paramConfig.getVal("fov")))
+      .map(point =>
+        project(
+          dirNorm,
+          point,
+          paramConfig.getVal("fov"),
+          canvas.width / canvas.height
+        )
+      )
       .map(([point]) => point.add(0.5).multiply(screenDim))
       .value();
 
