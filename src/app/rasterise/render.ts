@@ -2,7 +2,7 @@ import Vector from "../../core/Vector";
 import Monad from "../../core/monad";
 import { checkExhausted } from "../../core/utils";
 import project from "./project";
-import { Renderable } from "./types";
+import { Line, LineString, Point, Renderable } from "./types";
 
 function findMinDist(fromPos: Vector<3>, renderable: Renderable): number {
   switch (renderable.type) {
@@ -28,6 +28,69 @@ function findMinDist(fromPos: Vector<3>, renderable: Renderable): number {
   }
 }
 
+type ProjectPoint = (point: Vector<3>) => Vector<2>;
+
+function renderLineString(
+  ctx: CanvasRenderingContext2D,
+  lineString: LineString,
+  projectPoint: ProjectPoint
+) {
+  ctx.beginPath();
+  for (let i = 0; i < lineString.items.length; i++) {
+    const item = lineString.items[i];
+    const projected = projectPoint(item.point);
+    if (!projected.some(isNaN)) {
+      if (i > 0 && "style" in item && item.style != null) {
+        ctx.stroke();
+        ctx.strokeStyle = item.style;
+      }
+      if (i > 0 && "width" in item && item.width != null) {
+        ctx.lineWidth = item.width;
+      }
+      if (i === 0) {
+        ctx.moveTo(...projected.toArray());
+      } else {
+        ctx.lineTo(...projected.toArray());
+      }
+    }
+  }
+  ctx.stroke();
+}
+
+function renderLine(
+  ctx: CanvasRenderingContext2D,
+  line: Line,
+  projectPoint: ProjectPoint
+): void {
+  const projectedPoints = line.points.map(projectPoint);
+  if (projectedPoints.every(projected => !projected.some(isNaN))) {
+    const [start, end] = projectedPoints;
+    if (line.width != null) {
+      ctx.lineWidth = line.width;
+    }
+    if (line.style != null) {
+      ctx.strokeStyle = line.style;
+    }
+    ctx.beginPath();
+    ctx.moveTo(...start.toArray());
+    ctx.lineTo(...end.toArray());
+    ctx.stroke();
+  }
+}
+function renderPoint(
+  ctx: CanvasRenderingContext2D,
+  point: Point,
+  projectPoint: ProjectPoint
+): void {
+  const projected = projectPoint(point.point);
+  if (point.style != null) {
+    ctx.fillStyle = point.style;
+  }
+  ctx.beginPath();
+  ctx.arc(...projected.toArray(), point.radius ?? 1, 0, 2 * Math.PI);
+  ctx.fill();
+}
+
 export default function render(
   ctx: CanvasRenderingContext2D,
   renderables: Renderable[],
@@ -44,7 +107,7 @@ export default function render(
 
   const aspectRatio = screenDim.x() / screenDim.y();
 
-  const projectOnScreen = (point: Vector<3>) =>
+  const projectPoint: ProjectPoint = (point: Vector<3>) =>
     Monad.from(project(point, viewPos, dirNorm, fov, aspectRatio))
       .map(([point]) => point.add(0.5).multiply(screenDim))
       .value();
@@ -55,58 +118,17 @@ export default function render(
 
     switch (renderable.type) {
       case "LineString": {
-        ctx.beginPath();
-        for (let i = 0; i < renderable.items.length; i++) {
-          const item = renderable.items[i];
-          const projected = projectOnScreen(item.point);
-          if (!projected.some(isNaN)) {
-            if (i > 0 && "style" in item && item.style != null) {
-              ctx.stroke();
-              ctx.strokeStyle = item.style;
-            }
-            if (i > 0 && "width" in item && item.width != null) {
-              ctx.lineWidth = item.width;
-            }
-            if (i === 0) {
-              ctx.moveTo(...projected.toArray());
-            } else {
-              ctx.lineTo(...projected.toArray());
-            }
-          }
-        }
-        ctx.stroke();
+        renderLineString(ctx, renderable, projectPoint);
         break;
       }
-
       case "Line": {
-        const projectedPoints = renderable.points.map(projectOnScreen);
-        if (projectedPoints.every(projected => !projected.some(isNaN))) {
-          const [start, end] = projectedPoints;
-          if (renderable.width != null) {
-            ctx.lineWidth = renderable.width;
-          }
-          if (renderable.style != null) {
-            ctx.strokeStyle = renderable.style;
-          }
-          ctx.beginPath();
-          ctx.moveTo(...start.toArray());
-          ctx.lineTo(...end.toArray());
-          ctx.stroke();
-        }
+        renderLine(ctx, renderable, projectPoint);
         break;
       }
-
       case "Point": {
-        const projected = projectOnScreen(renderable.point);
-        if (renderable.style != null) {
-          ctx.fillStyle = renderable.style;
-        }
-        ctx.beginPath();
-        ctx.arc(...projected.toArray(), renderable.radius ?? 1, 0, 2 * Math.PI);
-        ctx.fill();
+        renderPoint(ctx, renderable, projectPoint);
         break;
       }
-
       default:
         return checkExhausted(renderable);
     }
