@@ -179,8 +179,12 @@ function animationFrame({
     {
       viewPos: Vector.create(
         -1,
-        Math.cos(time.now - time.animationStart) / 1.5,
-        Math.sin(time.now - time.animationStart) / 1.5
+        Math.cos(
+          ((time.now - time.animationStart) * paramConfig.getVal("speed")) / 100
+        ) / 1.5,
+        Math.sin(
+          ((time.now - time.animationStart) * paramConfig.getVal("speed")) / 100
+        ) / 1.5
       ),
       dirNorm,
       fov: paramConfig.getVal("fov"),
