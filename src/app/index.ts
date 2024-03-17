@@ -3,7 +3,7 @@ import { AppContextWithState, appMethods } from "../core/types";
 import Vector from "../core/Vector";
 import config from "./config";
 import rasterise from "./rasterise";
-import { createLine, Renderable } from "./rasterise/types";
+import { createLine, createPoint, Renderable } from "./rasterise/types";
 
 // interface Star {
 //   pos: Vector<3>;
@@ -149,7 +149,23 @@ function animationFrame({
 
   ctx.lineWidth = 3;
 
-  const renderables: Renderable[] = [];
+  const renderables: Renderable[] = [
+    createPoint({
+      point: cubeCenter,
+      radius: 30,
+      style: screenPos => {
+        const gradient = ctx.createRadialGradient(
+          ...screenPos.toArray(),
+          0,
+          ...screenPos.toArray(),
+          30
+        );
+        gradient.addColorStop(0, "rgba(255,255,255,1)");
+        gradient.addColorStop(1, "rgba(255,255,255,0)");
+        return gradient;
+      },
+    }),
+  ];
 
   for (let i = 0; i < 2; i++) {
     for (let j = 0; j < 2; j++) {
