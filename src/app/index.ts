@@ -3,7 +3,12 @@ import { AppContextWithState, appMethods } from "../core/types";
 import Vector from "../core/Vector";
 import config from "./config";
 import rasterise from "./rasterise";
-import { createLine, createPoint, Renderable } from "./rasterise/types";
+import {
+  createLabel,
+  createLine,
+  createPoint,
+  Renderable,
+} from "./rasterise/types";
 
 // interface Star {
 //   pos: Vector<3>;
@@ -132,7 +137,7 @@ function animationFrame({
   const cubeAngle =
     (((time.now - time.animationStart) * paramConfig.getVal("speed")) / 100) %
     (Math.PI * 2);
-  const cubeCenter = Vector.create(1.5, 0, 0);
+  const cubeCenter = Vector.zero(3);
 
   // point components are either 0 or 1
   const processCubeCorner = (point: Vector<3>): Vector<3> =>
@@ -150,15 +155,20 @@ function animationFrame({
   ctx.lineWidth = 3;
 
   const renderables: Renderable[] = [
+    createLabel({
+      text: "Test Cube",
+      point: Vector.create(0, -0.1, 0),
+      font: "30px sans-serif",
+    }),
     createPoint({
       point: cubeCenter,
       radius: 30,
-      style: screenPos => {
+      style: function (screenPos) {
         const gradient = ctx.createRadialGradient(
           ...screenPos.toArray(),
           0,
           ...screenPos.toArray(),
-          30
+          this.radius ?? 1
         );
         gradient.addColorStop(0, "rgba(255,255,255,1)");
         gradient.addColorStop(1, "rgba(255,255,255,0)");
@@ -204,7 +214,7 @@ function animationFrame({
     renderables,
     {
       viewPos: Vector.create(
-        -1,
+        -2.5,
         Math.cos(
           ((time.now - time.animationStart) * paramConfig.getVal("speed")) / 100
         ) / 1.5,

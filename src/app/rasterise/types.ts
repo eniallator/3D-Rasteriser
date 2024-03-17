@@ -30,7 +30,16 @@ export interface LineString {
   ];
 }
 
-export type Renderable = LineString | Line | Point;
+export interface Label {
+  type: "Label";
+  point: Vector<3>;
+  text: string;
+  maxWidth?: number;
+  style?: RenderStyle<Vector<2>>;
+  font?: string | ((projectedPoint: Vector<2>) => string);
+}
+
+export type Renderable = Point | Line | LineString | Label;
 
 export function createPoint(point: Omit<Point, "type">): Point {
   return { type: "Point", ...point };
@@ -42,4 +51,8 @@ export function createLine(line: Omit<Line, "type">): Line {
 
 export function createLineString(items: LineString["items"]): LineString {
   return { type: "LineString", items };
+}
+
+export function createLabel(label: Omit<Label, "type">): Label {
+  return { type: "Label", ...label };
 }

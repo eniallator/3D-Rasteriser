@@ -2,7 +2,7 @@ import Vector from "../../core/Vector";
 import { isFunction } from "../../core/guard";
 import { checkExhausted } from "../../core/utils";
 import project, { ProjectOptions } from "./project";
-import { Line, LineString, Point, Renderable } from "./types";
+import { Label, Line, LineString, Point, Renderable } from "./types";
 
 function findMinDist(fromPos: Vector<3>, renderable: Renderable): number {
   switch (renderable.type) {
@@ -20,6 +20,7 @@ function findMinDist(fromPos: Vector<3>, renderable: Renderable): number {
         )
       );
 
+    case "Label":
     case "Point":
       return fromPos.copy().sub(renderable.point).getSquaredMagnitude();
 
@@ -100,16 +101,43 @@ function renderPoint(
   ctx.fill();
 }
 
+function renderLabel(
+  ctx: CanvasRenderingContext2D,
+  label: Label,
+  projectoptions: ProjectOptions
+): void {
+  const [projected] = project(label.point, projectoptions);
+  if (label.style != null) {
+    ctx.fillStyle = isFunction(label.style)
+      ? label.style(projected)
+      : label.style;
+  }
+  if (label.font != null) {
+    ctx.font = isFunction(label.font) ? label.font(projected) : label.font;
+  }
+  const textWidth = ctx.measureText(label.text).width;
+  ctx.fillText(
+    label.text,
+    projected.x() -
+      (label.maxWidth != null
+        ? Math.min(textWidth, label.maxWidth) / 2
+        : textWidth / 2),
+    projected.y(),
+    label.maxWidth
+  );
+}
+
 interface RenderOptions {
   ctx: CanvasRenderingContext2D;
   defaultFill?: CanvasFillStrokeStyles["fillStyle"];
   defaultStroke?: CanvasFillStrokeStyles["strokeStyle"];
+  defaultFont?: string;
 }
 
 export default function render(
   renderables: Renderable[],
   projectOptions: ProjectOptions,
-  { ctx, defaultFill, defaultStroke }: RenderOptions
+  { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
   const { viewPos } = projectOptions;
   const sortedRenderables = renderables
@@ -119,6 +147,7 @@ export default function render(
   for (const [_, renderable] of sortedRenderables) {
     ctx.fillStyle = defaultFill ?? "white";
     ctx.strokeStyle = defaultStroke ?? "white";
+    ctx.font = defaultFont ?? "inherit";
 
     switch (renderable.type) {
       case "LineString": {
@@ -131,6 +160,10 @@ export default function render(
       }
       case "Point": {
         renderPoint(ctx, renderable, projectOptions);
+        break;
+      }
+      case "Label": {
+        renderLabel(ctx, renderable, projectOptions);
         break;
       }
       default:
