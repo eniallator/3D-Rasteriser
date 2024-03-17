@@ -28,14 +28,14 @@ export interface LineString {
 
 export type Renderable = LineString | Line | Point;
 
-export function point(point: Omit<Point, "type">): Point {
+export function createPoint(point: Omit<Point, "type">): Point {
   return { type: "Point", ...point };
 }
 
-export function line(line: Omit<Line, "type">): Line {
+export function createLine(line: Omit<Line, "type">): Line {
   return { type: "Line", ...line };
 }
 
-export function lineString(items: LineString["items"]): LineString {
+export function createLineString(items: LineString["items"]): LineString {
   return { type: "LineString", items };
 }

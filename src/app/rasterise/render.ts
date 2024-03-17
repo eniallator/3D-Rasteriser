@@ -1,7 +1,6 @@
 import Vector from "../../core/Vector";
-import Monad from "../../core/monad";
 import { checkExhausted } from "../../core/utils";
-import project from "./project";
+import project, { ProjectOptions } from "./project";
 import { Line, LineString, Point, Renderable } from "./types";
 
 function findMinDist(fromPos: Vector<3>, renderable: Renderable): number {
@@ -28,17 +27,15 @@ function findMinDist(fromPos: Vector<3>, renderable: Renderable): number {
   }
 }
 
-type ProjectPoint = (point: Vector<3>) => Vector<2>;
-
 function renderLineString(
   ctx: CanvasRenderingContext2D,
   lineString: LineString,
-  projectPoint: ProjectPoint
+  projectOptions: ProjectOptions
 ) {
   ctx.beginPath();
   for (let i = 0; i < lineString.items.length; i++) {
     const item = lineString.items[i];
-    const projected = projectPoint(item.point);
+    const [projected] = project(item.point, projectOptions);
     if (!projected.some(isNaN)) {
       if (i > 0 && "style" in item && item.style != null) {
         ctx.stroke();
@@ -60,9 +57,11 @@ function renderLineString(
 function renderLine(
   ctx: CanvasRenderingContext2D,
   line: Line,
-  projectPoint: ProjectPoint
+  projectOptions: ProjectOptions
 ): void {
-  const projectedPoints = line.points.map(projectPoint);
+  const projectedPoints = line.points.map(
+    point => project(point, projectOptions)[0]
+  );
   if (projectedPoints.every(projected => !projected.some(isNaN))) {
     const [start, end] = projectedPoints;
     if (line.width != null) {
@@ -77,12 +76,13 @@ function renderLine(
     ctx.stroke();
   }
 }
+
 function renderPoint(
   ctx: CanvasRenderingContext2D,
   point: Point,
-  projectPoint: ProjectPoint
+  projectOptions: ProjectOptions
 ): void {
-  const projected = projectPoint(point.point);
+  const [projected] = project(point.point, projectOptions);
   if (point.style != null) {
     ctx.fillStyle = point.style;
   }
@@ -91,26 +91,21 @@ function renderPoint(
   ctx.fill();
 }
 
+interface RenderOptions {
+  ctx: CanvasRenderingContext2D;
+  defaultFill?: CanvasFillStrokeStyles["fillStyle"];
+  defaultStroke?: CanvasFillStrokeStyles["strokeStyle"];
+}
+
 export default function render(
-  ctx: CanvasRenderingContext2D,
   renderables: Renderable[],
-  viewPos: Vector<3>,
-  dirNorm: Vector<3>,
-  fov: number,
-  screenDim: Vector<2>,
-  defaultFill?: CanvasFillStrokeStyles["fillStyle"],
-  defaultStroke?: CanvasFillStrokeStyles["strokeStyle"]
+  projectOptions: ProjectOptions,
+  { ctx, defaultFill, defaultStroke }: RenderOptions
 ): void {
+  const { viewPos } = projectOptions;
   const sortedRenderables = renderables
     .map(renderable => [findMinDist(viewPos, renderable), renderable] as const)
     .sort(([a], [b]) => b - a);
-
-  const aspectRatio = screenDim.x() / screenDim.y();
-
-  const projectPoint: ProjectPoint = (point: Vector<3>) =>
-    Monad.from(project(point, viewPos, dirNorm, fov, aspectRatio))
-      .map(([point]) => point.add(0.5).multiply(screenDim))
-      .value();
 
   for (const [_, renderable] of sortedRenderables) {
     ctx.fillStyle = defaultFill ?? "white";
@@ -118,15 +113,15 @@ export default function render(
 
     switch (renderable.type) {
       case "LineString": {
-        renderLineString(ctx, renderable, projectPoint);
+        renderLineString(ctx, renderable, projectOptions);
         break;
       }
       case "Line": {
-        renderLine(ctx, renderable, projectPoint);
+        renderLine(ctx, renderable, projectOptions);
         break;
       }
       case "Point": {
-        renderPoint(ctx, renderable, projectPoint);
+        renderPoint(ctx, renderable, projectOptions);
         break;
       }
       default:

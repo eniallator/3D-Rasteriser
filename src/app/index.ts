@@ -3,7 +3,7 @@ import { AppContextWithState, appMethods } from "../core/types";
 import Vector from "../core/Vector";
 import config from "./config";
 import rasterise from "./rasterise";
-import { line, Renderable } from "./rasterise/types";
+import { createLine, Renderable } from "./rasterise/types";
 
 // interface Star {
 //   pos: Vector<3>;
@@ -129,7 +129,6 @@ function animationFrame({
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const screenDim = Vector.create(canvas.width, canvas.height);
   const cubeAngle =
     (((time.now - time.animationStart) * paramConfig.getVal("speed")) / 100) %
     (Math.PI * 2);
@@ -148,7 +147,7 @@ function animationFrame({
       .map(point => point.add(cubeCenter))
       .value();
 
-  ctx.lineWidth = (screenDim.getMin() / 100) * paramConfig.getVal("star-size");
+  ctx.lineWidth = 3;
 
   const renderables: Renderable[] = [];
 
@@ -157,15 +156,18 @@ function animationFrame({
       const cornerPoint = Vector.create(i, j, (i + j) % 2);
       for (let k = 0; k < 3; k++) {
         const toPoint = cornerPoint.with(k, (cornerPoint.valueOf(k) + 1) % 2);
-        const halfwayPoint = cornerPoint.lerp(toPoint, 0.5);
+        const edgeColour = cornerPoint
+          .lerp(toPoint, 0.5)
+          .normalise()
+          .multiply(256);
 
         renderables.push(
-          line({
+          createLine({
             points: [
               processCubeCorner(cornerPoint),
               processCubeCorner(toPoint),
             ],
-            style: `rgb(${halfwayPoint.multiply(256).toArray().join(", ")})`,
+            style: `rgb(${edgeColour.toArray().join(", ")})`,
           })
         );
       }
@@ -173,16 +175,18 @@ function animationFrame({
   }
 
   rasterise.render(
-    ctx,
     renderables,
-    Vector.create(
-      -1,
-      Math.cos(time.now - time.animationStart),
-      Math.sin(time.now - time.animationStart)
-    ),
-    dirNorm,
-    paramConfig.getVal("fov"),
-    Vector.create(canvas.width, canvas.height)
+    {
+      viewPos: Vector.create(
+        -1,
+        Math.cos(time.now - time.animationStart) / 1.5,
+        Math.sin(time.now - time.animationStart) / 1.5
+      ),
+      dirNorm,
+      fov: paramConfig.getVal("fov"),
+      screenDim: Vector.create(canvas.width, canvas.height),
+    },
+    { ctx }
   );
 
   return { dirNorm };

@@ -13,12 +13,16 @@ function intersect(
   return [vecA.lerp(vecB, t), 0 <= t && t <= 1];
 }
 
+export interface ProjectOptions {
+  viewPos: Vector<3>;
+  dirNorm: Vector<3>;
+  fov: number;
+  screenDim: Vector<2>;
+}
+
 export default function project(
   point: Vector<3>,
-  viewPos: Vector<3>,
-  dirNorm: Vector<3>,
-  fov: number,
-  aspectRatio: number
+  { viewPos, dirNorm, fov, screenDim }: ProjectOptions
 ): [Vector<2>, boolean] {
   const offsettedPoint = point.copy().sub(viewPos);
   const pointInView = offsettedPoint.dot(dirNorm) > 0;
@@ -51,11 +55,14 @@ export default function project(
     pointOnPlane
   );
 
+  const aspectRatio = screenDim.x() / screenDim.y();
   return [
     Vector.create(
       xAxisIntersection.divide(aspectRatio).dot(xAxis),
       yAxisIntersection.dot(yAxis)
-    ),
+    )
+      .add(0.5)
+      .multiply(screenDim),
     pointInView && onXAxis && onYAxis,
   ];
 }
