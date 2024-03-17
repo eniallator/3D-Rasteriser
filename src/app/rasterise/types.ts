@@ -1,17 +1,21 @@
 import Vector from "../../core/Vector";
 
+type RenderStyle<O> =
+  | CanvasFillStrokeStyles["strokeStyle"]
+  | ((options: O) => CanvasFillStrokeStyles["strokeStyle"]);
+
 export interface Point {
   type: "Point";
   point: Vector<3>;
   radius?: number;
-  style?: CanvasFillStrokeStyles["fillStyle"];
+  style?: RenderStyle<Vector<2>>;
 }
 
 export interface Line {
   type: "Line";
   points: [Vector<3>, Vector<3>];
   width?: number;
-  style?: CanvasFillStrokeStyles["strokeStyle"];
+  style?: RenderStyle<[Vector<2>, Vector<2>]>;
 }
 
 export interface LineString {
@@ -20,7 +24,7 @@ export interface LineString {
     ...Array<{
       point: Vector<3>;
       width?: number;
-      style?: CanvasFillStrokeStyles["strokeStyle"];
+      style?: RenderStyle<Array<Vector<2>>>;
     }>,
     { point: Vector<3> },
   ];

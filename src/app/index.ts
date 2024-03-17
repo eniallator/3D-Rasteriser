@@ -156,10 +156,6 @@ function animationFrame({
       const cornerPoint = Vector.create(i, j, (i + j) % 2);
       for (let k = 0; k < 3; k++) {
         const toPoint = cornerPoint.with(k, (cornerPoint.valueOf(k) + 1) % 2);
-        const edgeColour = cornerPoint
-          .lerp(toPoint, 0.5)
-          .normalise()
-          .multiply(256);
 
         renderables.push(
           createLine({
@@ -167,7 +163,21 @@ function animationFrame({
               processCubeCorner(cornerPoint),
               processCubeCorner(toPoint),
             ],
-            style: `rgb(${edgeColour.toArray().join(", ")})`,
+            style: ([projectedCorner, projectedTo]) => {
+              const gradient = ctx.createLinearGradient(
+                ...projectedCorner.toArray(),
+                ...projectedTo.toArray()
+              );
+              gradient.addColorStop(
+                0,
+                `rgb(${cornerPoint.copy().multiply(256).toArray().join(", ")})`
+              );
+              gradient.addColorStop(
+                1,
+                `rgb(${toPoint.copy().multiply(256).toArray().join(", ")})`
+              );
+              return gradient;
+            },
           })
         );
       }

@@ -16,3 +16,10 @@ export function isArrayOf<T>(guard: Guard<T>): Guard<Array<T>> {
   return (value): value is Array<T> =>
     Array.isArray(value) && value.every(guard);
 }
+
+export function isFunction(
+  value: unknown
+  // eslint-disable-next-line @typescript-eslint/ban-types
+): value is Function {
+  return typeof value === "function";
+}

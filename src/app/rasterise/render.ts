@@ -1,4 +1,5 @@
 import Vector from "../../core/Vector";
+import { isFunction } from "../../core/guard";
 import { checkExhausted } from "../../core/utils";
 import project, { ProjectOptions } from "./project";
 import { Line, LineString, Point, Renderable } from "./types";
@@ -32,22 +33,26 @@ function renderLineString(
   lineString: LineString,
   projectOptions: ProjectOptions
 ) {
+  const projectedPoints = lineString.items.map(
+    ({ point }) => project(point, projectOptions)[0]
+  );
   ctx.beginPath();
-  for (let i = 0; i < lineString.items.length; i++) {
-    const item = lineString.items[i];
-    const [projected] = project(item.point, projectOptions);
-    if (!projected.some(isNaN)) {
+  if (projectedPoints.every(projected => !projected.some(isNaN))) {
+    for (let i = 0; i < lineString.items.length; i++) {
+      const item = lineString.items[i];
       if (i > 0 && "style" in item && item.style != null) {
         ctx.stroke();
-        ctx.strokeStyle = item.style;
+        ctx.strokeStyle = isFunction(item.style)
+          ? item.style(projectedPoints)
+          : item.style;
       }
       if (i > 0 && "width" in item && item.width != null) {
         ctx.lineWidth = item.width;
       }
       if (i === 0) {
-        ctx.moveTo(...projected.toArray());
+        ctx.moveTo(...projectedPoints[i].toArray());
       } else {
-        ctx.lineTo(...projected.toArray());
+        ctx.lineTo(...projectedPoints[i].toArray());
       }
     }
   }
@@ -61,14 +66,16 @@ function renderLine(
 ): void {
   const projectedPoints = line.points.map(
     point => project(point, projectOptions)[0]
-  );
+  ) as [Vector<2>, Vector<2>];
   if (projectedPoints.every(projected => !projected.some(isNaN))) {
     const [start, end] = projectedPoints;
     if (line.width != null) {
       ctx.lineWidth = line.width;
     }
     if (line.style != null) {
-      ctx.strokeStyle = line.style;
+      ctx.strokeStyle = isFunction(line.style)
+        ? line.style(projectedPoints)
+        : line.style;
     }
     ctx.beginPath();
     ctx.moveTo(...start.toArray());
@@ -84,7 +91,9 @@ function renderPoint(
 ): void {
   const [projected] = project(point.point, projectOptions);
   if (point.style != null) {
-    ctx.fillStyle = point.style;
+    ctx.fillStyle = isFunction(point.style)
+      ? point.style(projected)
+      : point.style;
   }
   ctx.beginPath();
   ctx.arc(...projected.toArray(), point.radius ?? 1, 0, 2 * Math.PI);
