@@ -59,3 +59,7 @@ export function isEqual<T>(a: T, b: T): boolean {
           )))
   );
 }
+
+export function tuple<const T extends Array<unknown>>(...args: T): T {
+  return args;
+}

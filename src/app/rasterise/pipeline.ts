@@ -1,8 +1,9 @@
-import { filterAndMap } from "../../core/utils";
+import Monad from "../../core/monad";
+import { filterAndMap, tuple } from "../../core/utils";
 import { findSqrDist, isProjectedOnScreen } from "./helpers";
 import { ProjectOptions, projectGeometry } from "./project";
 import { RenderFn, renderFnMap } from "./render";
-import { Geometry, Geometry1D, ToProjected, isGeometry1D } from "./types";
+import { Geometry, Geometry1D, isGeometry1D } from "./types";
 
 interface RenderOptions {
   ctx: CanvasRenderingContext2D;
@@ -16,18 +17,18 @@ export function naivePipeline(
   projectOptions: ProjectOptions,
   { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
-  filterAndMap(
-    geometries,
-    <G extends Geometry1D>(geometry: G): [number, ToProjected<G>] | null => {
-      const projectedGeometry = isGeometry1D(geometry)
-        ? projectGeometry(geometry, projectOptions)
-        : null;
-      return projectedGeometry != null &&
-        isProjectedOnScreen(projectedGeometry, projectOptions.screenDim)
-        ? [findSqrDist(projectOptions.viewPos, geometry).avg, projectedGeometry]
-        : null;
-    }
-  )
+  filterAndMap(geometries, (geometry: Geometry1D) => {
+    const projectedGeometry = isGeometry1D(geometry)
+      ? projectGeometry(geometry, projectOptions)
+      : null;
+    return projectedGeometry != null &&
+      isProjectedOnScreen(projectedGeometry, projectOptions.screenDim)
+      ? tuple(
+          findSqrDist(projectOptions.viewPos, geometry).avg,
+          projectedGeometry
+        )
+      : null;
+  })
     .sort(([a], [b]) => b - a)
     .forEach(([_, projected]) => {
       ctx.fillStyle = defaultFill ?? "white";
@@ -46,15 +47,23 @@ export function fullPipeline(
   projectOptions: ProjectOptions,
   { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
-  filterAndMap(
-    geometries,
-    <G extends Geometry>(
-      geometry: G
-    ): [ReturnType<typeof findSqrDist>, ToProjected<G>] | null => {
-      const projectedGeometry = projectGeometry(geometry, projectOptions);
-      return isProjectedOnScreen(projectedGeometry, projectOptions.screenDim)
-        ? [findSqrDist(projectOptions.viewPos, geometry), projectedGeometry]
-        : null;
-    }
-  );
+  Monad.from(geometries)
+    .map(geometries =>
+      filterAndMap(geometries, (geometry: Geometry) => {
+        const projectedGeometry = projectGeometry(geometry, projectOptions);
+        return isProjectedOnScreen(projectedGeometry, projectOptions.screenDim)
+          ? tuple(
+              findSqrDist(projectOptions.viewPos, geometry),
+              projectedGeometry
+            )
+          : null;
+      })
+    )
+    .map(projectedData =>
+      filterAndMap(projectedData, ([measurements, projected], _, others) => {
+        return projected.type === "Triangle"
+          ? others.reduce((acc, other) => acc, projected)
+          : projected;
+      })
+    );
 }
