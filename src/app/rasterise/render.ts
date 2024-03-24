@@ -1,173 +1,86 @@
-import Vector from "../../core/Vector";
 import { isFunction } from "../../core/guard";
-import { checkExhausted } from "../../core/utils";
-import project, { ProjectOptions } from "./project";
-import { Label, Line, LineString, Point, Renderable } from "./types";
-
-function findMinDist(fromPos: Vector<3>, renderable: Renderable): number {
-  switch (renderable.type) {
-    case "LineString":
-      return Math.min(
-        ...renderable.items.map(({ point }) =>
-          fromPos.copy().sub(point).getSquaredMagnitude()
-        )
-      );
-
-    case "Line":
-      return Math.min(
-        ...renderable.points.map(point =>
-          fromPos.copy().sub(point).getSquaredMagnitude()
-        )
-      );
-
-    case "Label":
-    case "Point":
-      return fromPos.copy().sub(renderable.point).getSquaredMagnitude();
-
-    default:
-      return checkExhausted(renderable);
-  }
-}
-
-function renderLineString(
-  ctx: CanvasRenderingContext2D,
-  lineString: LineString,
-  projectOptions: ProjectOptions
-) {
-  const projectedPoints = lineString.items.map(
-    ({ point }) => project(point, projectOptions)[0]
-  );
-  ctx.beginPath();
-  if (projectedPoints.every(projected => !projected.some(isNaN))) {
-    for (let i = 0; i < lineString.items.length; i++) {
-      const item = lineString.items[i];
-      if (i > 0 && "style" in item && item.style != null) {
-        ctx.stroke();
-        ctx.strokeStyle = isFunction(item.style)
-          ? item.style(projectedPoints)
-          : item.style;
-      }
-      if (i > 0 && "width" in item && item.width != null) {
-        ctx.lineWidth = item.width;
-      }
-      if (i === 0) {
-        ctx.moveTo(...projectedPoints[i].toArray());
-      } else {
-        ctx.lineTo(...projectedPoints[i].toArray());
-      }
-    }
-  }
-  ctx.stroke();
-}
-
-function renderLine(
-  ctx: CanvasRenderingContext2D,
-  line: Line,
-  projectOptions: ProjectOptions
-): void {
-  const projectedPoints = line.points.map(
-    point => project(point, projectOptions)[0]
-  ) as [Vector<2>, Vector<2>];
-  if (projectedPoints.every(projected => !projected.some(isNaN))) {
-    const [start, end] = projectedPoints;
-    if (line.width != null) {
-      ctx.lineWidth = line.width;
-    }
-    if (line.style != null) {
-      ctx.strokeStyle = isFunction(line.style)
-        ? line.style(projectedPoints)
-        : line.style;
-    }
-    ctx.beginPath();
-    ctx.moveTo(...start.toArray());
-    ctx.lineTo(...end.toArray());
-    ctx.stroke();
-  }
-}
+import { optSetFill, optSetStroke } from "./helpers";
+import {
+  ProjectedGeometry,
+  ProjectedLabel,
+  ProjectedLine,
+  ProjectedPoint,
+  ProjectedTriangle,
+} from "./types";
 
 function renderPoint(
   ctx: CanvasRenderingContext2D,
-  point: Point,
-  projectOptions: ProjectOptions
+  point: ProjectedPoint
 ): void {
-  const [projected] = project(point.point, projectOptions);
-  if (point.style != null) {
-    ctx.fillStyle = isFunction(point.style)
-      ? point.style(projected)
-      : point.style;
-  }
+  optSetFill(ctx, point.geometry.style, point);
   ctx.beginPath();
-  ctx.arc(...projected.toArray(), point.radius ?? 1, 0, 2 * Math.PI);
+  ctx.arc(
+    ...point.projected.toArray(),
+    point.geometry.radius ?? 1,
+    0,
+    2 * Math.PI
+  );
   ctx.fill();
 }
 
 function renderLabel(
   ctx: CanvasRenderingContext2D,
-  label: Label,
-  projectoptions: ProjectOptions
+  label: ProjectedLabel
 ): void {
-  const [projected] = project(label.point, projectoptions);
-  if (label.style != null) {
-    ctx.fillStyle = isFunction(label.style)
-      ? label.style(projected)
-      : label.style;
+  optSetFill(ctx, label.geometry.style, label);
+  if (label.geometry.font != null) {
+    ctx.font = isFunction(label.geometry.font)
+      ? label.geometry.font(label)
+      : label.geometry.font;
   }
-  if (label.font != null) {
-    ctx.font = isFunction(label.font) ? label.font(projected) : label.font;
-  }
-  const textWidth = ctx.measureText(label.text).width;
+  const textWidth = ctx.measureText(label.geometry.text).width;
   ctx.fillText(
-    label.text,
-    projected.x() -
-      (label.maxWidth != null
-        ? Math.min(textWidth, label.maxWidth) / 2
+    label.geometry.text,
+    label.projected.x() -
+      (label.geometry.maxWidth != null
+        ? Math.min(textWidth, label.geometry.maxWidth) / 2
         : textWidth / 2),
-    projected.y(),
-    label.maxWidth
+    label.projected.y(),
+    label.geometry.maxWidth
   );
 }
 
-interface RenderOptions {
-  ctx: CanvasRenderingContext2D;
-  defaultFill?: CanvasFillStrokeStyles["fillStyle"];
-  defaultStroke?: CanvasFillStrokeStyles["strokeStyle"];
-  defaultFont?: string;
-}
-
-export default function render(
-  renderables: Renderable[],
-  projectOptions: ProjectOptions,
-  { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
-): void {
-  const { viewPos } = projectOptions;
-  const sortedRenderables = renderables
-    .map(renderable => [findMinDist(viewPos, renderable), renderable] as const)
-    .sort(([a], [b]) => b - a);
-
-  for (const [_, renderable] of sortedRenderables) {
-    ctx.fillStyle = defaultFill ?? "white";
-    ctx.strokeStyle = defaultStroke ?? "white";
-    ctx.font = defaultFont ?? "inherit";
-
-    switch (renderable.type) {
-      case "LineString": {
-        renderLineString(ctx, renderable, projectOptions);
-        break;
-      }
-      case "Line": {
-        renderLine(ctx, renderable, projectOptions);
-        break;
-      }
-      case "Point": {
-        renderPoint(ctx, renderable, projectOptions);
-        break;
-      }
-      case "Label": {
-        renderLabel(ctx, renderable, projectOptions);
-        break;
-      }
-      default:
-        return checkExhausted(renderable);
-    }
+function renderLine(ctx: CanvasRenderingContext2D, line: ProjectedLine): void {
+  if (line.geometry.width != null) {
+    ctx.lineWidth = line.geometry.width;
   }
+  optSetStroke(ctx, line.geometry.style, line);
+  ctx.beginPath();
+  for (let i = 0; i < line.projected.length; i++) {
+    ctx[i === 0 ? "moveTo" : "lineTo"](...line.projected[i].toArray());
+  }
+  ctx.stroke();
 }
+
+function renderTriangle(
+  ctx: CanvasRenderingContext2D,
+  triangle: ProjectedTriangle
+): void {
+  optSetFill(ctx, triangle.geometry.style, triangle);
+  ctx.beginPath();
+  for (let i = 0; i < triangle.projected.length; i++) {
+    ctx[i === 0 ? "moveTo" : "lineTo"](...triangle.projected[i].toArray());
+  }
+  ctx.fill();
+}
+
+export type RenderFn<P extends ProjectedGeometry> = (
+  ctx: CanvasRenderingContext2D,
+  projected: P
+) => void;
+
+type RenderFns = {
+  [P in ProjectedGeometry as P["geometry"]["type"]]: RenderFn<P>;
+};
+
+export const renderFnMap: RenderFns = {
+  Label: renderLabel,
+  Line: renderLine,
+  Point: renderPoint,
+  Triangle: renderTriangle,
+};

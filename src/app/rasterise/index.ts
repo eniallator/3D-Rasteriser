@@ -1,7 +1,8 @@
-import render from "./render";
-import project from "./project";
+import { naivePipeline, fullPipeline } from "./pipeline";
+import { projectGeometry } from "./project";
 
 export default {
-  render,
-  project,
+  naivePipeline,
+  fullPipeline,
+  projectGeometry,
 };

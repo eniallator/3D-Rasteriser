@@ -7,7 +7,7 @@ import {
   createLabel,
   createLine,
   createPoint,
-  Renderable,
+  Geometry1D,
 } from "./rasterise/types";
 
 // interface Star {
@@ -154,7 +154,7 @@ function animationFrame({
 
   ctx.lineWidth = 3;
 
-  const renderables: Renderable[] = [
+  const geometries: Geometry1D[] = [
     createLabel({
       text: "Test Cube",
       point: Vector.create(0, -0.1, 0),
@@ -163,15 +163,15 @@ function animationFrame({
     createPoint({
       point: cubeCenter,
       radius: 30,
-      style: function (screenPos) {
+      style: ({ projected }) => {
         const gradient = ctx.createRadialGradient(
-          ...screenPos.toArray(),
+          ...projected.toArray(),
           0,
-          ...screenPos.toArray(),
-          this.radius ?? 1
+          ...projected.toArray(),
+          30
         );
-        gradient.addColorStop(0, "rgba(255,255,255,1)");
-        gradient.addColorStop(1, "rgba(255,255,255,0)");
+        gradient.addColorStop(0, "rgba(255, 255, 255, 1)");
+        gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
         return gradient;
       },
     }),
@@ -183,16 +183,16 @@ function animationFrame({
       for (let k = 0; k < 3; k++) {
         const toPoint = cornerPoint.with(k, (cornerPoint.valueOf(k) + 1) % 2);
 
-        renderables.push(
+        geometries.push(
           createLine({
             points: [
               processCubeCorner(cornerPoint),
               processCubeCorner(toPoint),
             ],
-            style: ([projectedCorner, projectedTo]) => {
+            style: ({ projected }) => {
               const gradient = ctx.createLinearGradient(
-                ...projectedCorner.toArray(),
-                ...projectedTo.toArray()
+                ...projected[0].toArray(),
+                ...projected[1].toArray()
               );
               gradient.addColorStop(
                 0,
@@ -210,8 +210,8 @@ function animationFrame({
     }
   }
 
-  rasterise.render(
-    renderables,
+  rasterise.naivePipeline(
+    geometries,
     {
       viewPos: Vector.create(
         -2.5,

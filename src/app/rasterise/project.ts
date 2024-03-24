@@ -1,17 +1,7 @@
 import Vector from "../../core/Vector";
-
-function intersect(
-  vecA: Vector<3>,
-  vecB: Vector<3>,
-  point: Vector<3>
-): [Vector<3>, boolean] {
-  const a = vecA.copy().sub(point).getMagnitude();
-  const b = vecB.copy().sub(point).getMagnitude();
-  const c = vecA.copy().sub(vecB).getMagnitude();
-
-  const t = (b ** 2 - a ** 2 + c ** 2) / (2 * c);
-  return [vecA.lerp(vecB, t), 0 <= t && t <= 1];
-}
+import { checkExhausted } from "../../core/utils";
+import { intersect } from "./helpers";
+import { Geometry, ToProjected } from "./types";
 
 export interface ProjectOptions {
   viewPos: Vector<3>;
@@ -20,14 +10,12 @@ export interface ProjectOptions {
   screenDim: Vector<2>;
 }
 
-export default function project(
+function project(
   point: Vector<3>,
   { viewPos, dirNorm, fov, screenDim }: ProjectOptions
 ): [Vector<2>, boolean] {
-  const offsettedPoint = point.copy().sub(viewPos);
-  const pointInView = offsettedPoint.dot(dirNorm) > 0;
   const screenCenterPos = dirNorm.copy().setMagnitude(1 / fov);
-  const pointNorm = offsettedPoint.getNorm();
+  const pointNorm = point.copy().sub(viewPos).getNorm();
   const t =
     screenCenterPos.multiply(dirNorm).sum() /
     pointNorm.copy().multiply(dirNorm).sum();
@@ -63,6 +51,32 @@ export default function project(
     )
       .add(0.5)
       .multiply(screenDim),
-    pointInView && onXAxis && onYAxis,
+    onXAxis && onYAxis,
   ];
+}
+
+export function projectGeometry<G extends Geometry>(
+  geometry: G,
+  projectOptions: ProjectOptions
+): ToProjected<G> {
+  switch (geometry.type) {
+    case "Point":
+    case "Label":
+      return {
+        type: geometry.type,
+        geometry,
+        projected: project(geometry.point, projectOptions)[0],
+      } as ToProjected<G>;
+    case "Line":
+    case "Triangle":
+      return {
+        type: geometry.type,
+        geometry,
+        projected: geometry.points.map(
+          point => project(point, projectOptions)[0]
+        ),
+      } as ToProjected<G>;
+    default:
+      return checkExhausted(geometry);
+  }
 }
