@@ -1,7 +1,12 @@
 import Vector from "../../core/Vector";
 import { isFunction } from "../../core/guard";
-import { checkExhausted } from "../../core/utils";
-import { StrokeStyle, FillStyle, Geometry, ProjectedGeometry } from "./types";
+import { checkExhausted, tuple } from "../../core/utils";
+import {
+  StrokeStyle,
+  FillStyle,
+  Primitive2D,
+  ProjectedPrimitive,
+} from "./types";
 
 export function optSetStroke<A>(
   ctx: CanvasRenderingContext2D,
@@ -25,17 +30,17 @@ export function optSetFill<A>(
 
 export function findSqrDist(
   fromPos: Vector<3>,
-  geometry: Geometry
+  primitive: Primitive2D
 ): { avg: number; min: number; max: number } {
-  switch (geometry.type) {
+  switch (primitive.type) {
     case "Point":
     case "Label": {
-      const avg = fromPos.copy().sub(geometry.point).getSquaredMagnitude();
+      const avg = fromPos.copy().sub(primitive.point).getSquaredMagnitude();
       return { avg, min: avg, max: avg };
     }
     case "Line":
     case "Triangle": {
-      const extremes = geometry.points.reduce(
+      const extremes = primitive.points.reduce(
         (acc, point) => ({
           min: Math.min(
             acc.min,
@@ -52,43 +57,43 @@ export function findSqrDist(
         ...extremes,
         avg: fromPos
           .copy()
-          .sub(geometry.points.reduce((acc, point) => acc.lerp(point, 0.5)))
+          .sub(primitive.points.reduce((acc, point) => acc.lerp(point, 0.5)))
           .getSquaredMagnitude(),
       };
     }
 
     default:
-      return checkExhausted(geometry);
+      return checkExhausted(primitive);
   }
 }
 
-export function intersect(
-  vecA: Vector<3>,
-  vecB: Vector<3>,
-  point: Vector<3>
-): [Vector<3>, boolean] {
+export function intersect<N extends number>(
+  vecA: Vector<N>,
+  vecB: Vector<N>,
+  point: Vector<N>
+): Vector<N> {
   const a = vecA.copy().sub(point).getMagnitude();
   const b = vecB.copy().sub(point).getMagnitude();
   const c = vecA.copy().sub(vecB).getMagnitude();
 
   const t = (b ** 2 - a ** 2 + c ** 2) / (2 * c);
-  return [vecA.lerp(vecB, t), 0 <= t && t <= 1];
+  return vecA.lerp(vecB, t);
 }
 
 export function isProjectedOnScreen(
-  projectedGeometry: ProjectedGeometry,
-  // Test if the projected is overlapping the screen dim and if not, return false
-  _screenDim: Vector<2>
+  projectedPrimitive: ProjectedPrimitive,
+  screenDim: Vector<2>
 ): boolean {
-  switch (projectedGeometry.type) {
+  const axes = tuple(screenDim.with(0, 0), screenDim.with(1, 0));
+  switch (projectedPrimitive.type) {
     case "Point":
     case "Label":
-      return !projectedGeometry.projected.some(isNaN);
+      return !projectedPrimitive.projected.some(isNaN);
     case "Line":
     case "Triangle":
       return (
-        projectedGeometry.projected.length > 0 &&
-        projectedGeometry.projected.every(projected => !projected.some(isNaN))
+        projectedPrimitive.projected.length > 0 &&
+        projectedPrimitive.projected.every(projected => !projected.some(isNaN))
       );
   }
 }

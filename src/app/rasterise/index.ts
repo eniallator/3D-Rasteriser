@@ -1,8 +1,8 @@
 import { naivePipeline, fullPipeline } from "./pipeline";
-import { projectGeometry } from "./project";
+import { projectPrimitive } from "./project";
 
 export default {
   naivePipeline,
   fullPipeline,
-  projectGeometry,
+  projectPrimitive,
 };

@@ -7,7 +7,7 @@ import {
   createLabel,
   createLine,
   createPoint,
-  Geometry1D,
+  Primitive1D,
 } from "./rasterise/types";
 
 // interface Star {
@@ -154,7 +154,7 @@ function animationFrame({
 
   ctx.lineWidth = 3;
 
-  const geometries: Geometry1D[] = [
+  const primitives: Primitive1D[] = [
     createLabel({
       text: "Test Cube",
       point: Vector.create(0, -0.1, 0),
@@ -183,7 +183,7 @@ function animationFrame({
       for (let k = 0; k < 3; k++) {
         const toPoint = cornerPoint.with(k, (cornerPoint.valueOf(k) + 1) % 2);
 
-        geometries.push(
+        primitives.push(
           createLine({
             points: [
               processCubeCorner(cornerPoint),
@@ -196,11 +196,23 @@ function animationFrame({
               );
               gradient.addColorStop(
                 0,
-                `rgb(${cornerPoint.copy().multiply(256).toArray().join(", ")})`
+                `rgb(${cornerPoint
+                  .copy()
+                  .add(1e-10)
+                  .normalise()
+                  .multiply(3 * 256)
+                  .toArray()
+                  .join(", ")})`
               );
               gradient.addColorStop(
                 1,
-                `rgb(${toPoint.copy().multiply(256).toArray().join(", ")})`
+                `rgb(${toPoint
+                  .copy()
+                  .add(1e-10)
+                  .normalise()
+                  .multiply(3 * 256)
+                  .toArray()
+                  .join(", ")})`
               );
               return gradient;
             },
@@ -211,7 +223,7 @@ function animationFrame({
   }
 
   rasterise.naivePipeline(
-    geometries,
+    primitives,
     {
       viewPos: Vector.create(
         -2.5,

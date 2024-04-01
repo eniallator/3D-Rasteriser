@@ -1,9 +1,9 @@
 import Monad from "../../core/monad";
 import { filterAndMap, tuple } from "../../core/utils";
 import { findSqrDist, isProjectedOnScreen } from "./helpers";
-import { ProjectOptions, projectGeometry } from "./project";
+import { ProjectOptions, projectPrimitive } from "./project";
 import { RenderFn, renderFnMap } from "./render";
-import { Geometry, Geometry1D, isGeometry1D } from "./types";
+import { Primitive2D, Primitive1D } from "./types";
 
 interface RenderOptions {
   ctx: CanvasRenderingContext2D;
@@ -13,19 +13,17 @@ interface RenderOptions {
 }
 
 export function naivePipeline(
-  geometries: Geometry1D[],
+  primitives: Primitive1D[],
   projectOptions: ProjectOptions,
   { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
-  filterAndMap(geometries, (geometry: Geometry1D) => {
-    const projectedGeometry = isGeometry1D(geometry)
-      ? projectGeometry(geometry, projectOptions)
-      : null;
-    return projectedGeometry != null &&
-      isProjectedOnScreen(projectedGeometry, projectOptions.screenDim)
+  filterAndMap(primitives, (primitive: Primitive1D) => {
+    const projectedPrimitive = projectPrimitive(primitive, projectOptions);
+    return projectedPrimitive != null &&
+      isProjectedOnScreen(projectedPrimitive, projectOptions.screenDim)
       ? tuple(
-          findSqrDist(projectOptions.viewPos, geometry).avg,
-          projectedGeometry
+          findSqrDist(projectOptions.viewPos, primitive).avg,
+          projectedPrimitive
         )
       : null;
   })
@@ -35,7 +33,7 @@ export function naivePipeline(
       ctx.strokeStyle = defaultStroke ?? "white";
       ctx.font = defaultFont ?? "inherit";
 
-      const render = renderFnMap[projected.geometry.type] as RenderFn<
+      const render = renderFnMap[projected.primitive.type] as RenderFn<
         typeof projected
       >;
       render(ctx, projected);
@@ -43,27 +41,32 @@ export function naivePipeline(
 }
 
 export function fullPipeline(
-  geometries: Geometry[],
+  primitives: Primitive2D[],
   projectOptions: ProjectOptions,
   { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
-  Monad.from(geometries)
-    .map(geometries =>
-      filterAndMap(geometries, (geometry: Geometry) => {
-        const projectedGeometry = projectGeometry(geometry, projectOptions);
-        return isProjectedOnScreen(projectedGeometry, projectOptions.screenDim)
+  Monad.from(primitives)
+    .map(primitives =>
+      filterAndMap(primitives, (primitive: Primitive2D) => {
+        const projectedPrimitive = projectPrimitive(primitive, projectOptions);
+        return isProjectedOnScreen(projectedPrimitive, projectOptions.screenDim)
           ? tuple(
-              findSqrDist(projectOptions.viewPos, geometry),
-              projectedGeometry
+              findSqrDist(projectOptions.viewPos, primitive),
+              projectedPrimitive
             )
           : null;
-      })
+      }).sort(([a], [b]) => b.avg - a.avg)
     )
-    .map(projectedData =>
-      filterAndMap(projectedData, ([measurements, projected], _, others) => {
-        return projected.type === "Triangle"
-          ? others.reduce((acc, other) => acc, projected)
-          : projected;
-      })
-    );
+    .map(projectedData => {
+      const hiddenIndices = new Set<number>();
+      const resolvedIntersections = filterAndMap(
+        projectedData,
+        ([measurements, projected], _, others) => {
+          return projected.type === "Triangle"
+            ? others.reduce((acc, other) => acc, projected)
+            : projected;
+        }
+      );
+      return resolvedIntersections.filter((_, i) => !hiddenIndices.has(i));
+    });
 }

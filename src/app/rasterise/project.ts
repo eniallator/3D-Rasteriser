@@ -1,7 +1,7 @@
 import Vector from "../../core/Vector";
 import { checkExhausted } from "../../core/utils";
 import { intersect } from "./helpers";
-import { Geometry, ToProjected } from "./types";
+import { Primitive2D, ToProjected } from "./types";
 
 export interface ProjectOptions {
   viewPos: Vector<3>;
@@ -13,7 +13,7 @@ export interface ProjectOptions {
 function project(
   point: Vector<3>,
   { viewPos, dirNorm, fov, screenDim }: ProjectOptions
-): [Vector<2>, boolean] {
+): Vector<2> {
   const screenCenterPos = dirNorm.copy().setMagnitude(1 / fov);
   const pointNorm = point.copy().sub(viewPos).getNorm();
   const t =
@@ -32,51 +32,40 @@ function project(
     y: screenCenterPos.copy().add(yAxis.copy().divide(2)),
   };
 
-  const [xAxisIntersection, onXAxis] = intersect(
-    screenStart.x,
-    screenEnd.x,
-    pointOnPlane
-  );
-  const [yAxisIntersection, onYAxis] = intersect(
-    screenStart.y,
-    screenEnd.y,
-    pointOnPlane
-  );
+  const xAxisIntersection = intersect(screenStart.x, screenEnd.x, pointOnPlane);
+  const yAxisIntersection = intersect(screenStart.y, screenEnd.y, pointOnPlane);
 
   const aspectRatio = screenDim.x() / screenDim.y();
-  return [
-    Vector.create(
-      xAxisIntersection.divide(aspectRatio).dot(xAxis),
-      yAxisIntersection.dot(yAxis)
-    )
-      .add(0.5)
-      .multiply(screenDim),
-    onXAxis && onYAxis,
-  ];
+  return Vector.create(
+    xAxisIntersection.divide(aspectRatio).dot(xAxis),
+    yAxisIntersection.dot(yAxis)
+  )
+    .add(0.5)
+    .multiply(screenDim);
 }
 
-export function projectGeometry<G extends Geometry>(
-  geometry: G,
+export function projectPrimitive<P extends Primitive2D>(
+  primitive: P,
   projectOptions: ProjectOptions
-): ToProjected<G> {
-  switch (geometry.type) {
+): ToProjected<P> {
+  switch (primitive.type) {
     case "Point":
     case "Label":
       return {
-        type: geometry.type,
-        geometry,
-        projected: project(geometry.point, projectOptions)[0],
-      } as ToProjected<G>;
+        type: primitive.type,
+        primitive,
+        projected: project(primitive.point, projectOptions),
+      } as ToProjected<P>;
     case "Line":
     case "Triangle":
       return {
-        type: geometry.type,
-        geometry,
-        projected: geometry.points.map(
-          point => project(point, projectOptions)[0]
+        type: primitive.type,
+        primitive,
+        projected: primitive.points.map(point =>
+          project(point, projectOptions)
         ),
-      } as ToProjected<G>;
+      } as ToProjected<P>;
     default:
-      return checkExhausted(geometry);
+      return checkExhausted(primitive);
   }
 }

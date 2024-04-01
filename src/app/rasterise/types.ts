@@ -11,37 +11,37 @@ export type FillStyle<A> = OptRunnable<A, CanvasFillStrokeStyles["fillStyle"]>;
 
 export interface ProjectedPoint {
   type: "Point";
-  geometry: Point;
+  primitive: Point;
   projected: Vector<2>;
 }
 
 export interface ProjectedLabel {
   type: "Label";
-  geometry: Label;
+  primitive: Label;
   projected: Vector<2>;
 }
 
 export interface ProjectedLine {
   type: "Line";
-  geometry: Line;
+  primitive: Line;
   projected: Array<Vector<2>>;
 }
 
 export interface ProjectedTriangle {
   type: "Triangle";
-  geometry: Triangle;
-  projected: [Vector<2>, Vector<2>, Vector<2>];
+  primitive: Triangle;
+  projected: Array<Vector<2>>;
 }
 
-export type ProjectedGeometry =
+export type ProjectedPrimitive =
   | ProjectedPoint
   | ProjectedLabel
   | ProjectedLine
   | ProjectedTriangle;
 
-export type ToProjected<G extends Geometry> = {
-  [P in ProjectedGeometry as P["type"]]: P;
-}[G["type"]];
+export type ToProjected<A extends Primitive2D> = {
+  [P in ProjectedPrimitive as P["type"]]: P;
+}[A["type"]];
 
 export interface Point {
   type: "Point";
@@ -72,8 +72,8 @@ export interface Triangle {
   style?: FillStyle<ProjectedTriangle>;
 }
 
-export type Geometry1D = Point | Label | Line;
-export type Geometry = Geometry1D | Triangle;
+export type Primitive1D = Point | Label | Line;
+export type Primitive2D = Primitive1D | Triangle;
 
 export function createPoint(point: Omit<Point, "type">): Point {
   return { type: "Point", ...point };
@@ -91,10 +91,12 @@ export function createTriangle(triangle: Omit<Triangle, "type">): Triangle {
   return { type: "Triangle", ...triangle };
 }
 
-export function isGeometry1D(geometry: Geometry): geometry is Geometry1D {
+export function isPrimitive1D(
+  primitive: Primitive2D
+): primitive is Primitive1D {
   return (
-    geometry.type === "Point" ||
-    geometry.type === "Label" ||
-    geometry.type === "Line"
+    primitive.type === "Point" ||
+    primitive.type === "Label" ||
+    primitive.type === "Line"
   );
 }
