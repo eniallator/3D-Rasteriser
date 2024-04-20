@@ -1,9 +1,15 @@
-import Monad from "../../core/monad";
+import Vector from "../../core/Vector";
 import { filterAndMap, tuple } from "../../core/utils";
-import { findSqrDist, isProjectedOnScreen } from "./helpers";
+import {
+  findSqrDist,
+  isPrimitiveOnScreen,
+  pointsToLine,
+  pointsToPlane,
+} from "./helpers";
+import { linePlaneIntersection, resolveIntersections } from "./intersect";
 import { ProjectOptions, projectPrimitive } from "./project";
-import { RenderFn, renderFnMap } from "./render";
-import { Primitive2D, Primitive1D } from "./types";
+import { renderPrimitive } from "./render";
+import { Primitive1D, Primitive2D } from "./types";
 
 interface RenderOptions {
   ctx: CanvasRenderingContext2D;
@@ -18,12 +24,10 @@ export function naivePipeline(
   { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
   filterAndMap(primitives, (primitive: Primitive1D) => {
-    const projectedPrimitive = projectPrimitive(primitive, projectOptions);
-    return projectedPrimitive != null &&
-      isProjectedOnScreen(projectedPrimitive, projectOptions.screenDim)
+    return isPrimitiveOnScreen(primitive, projectOptions)
       ? tuple(
           findSqrDist(projectOptions.viewPos, primitive).avg,
-          projectedPrimitive
+          projectPrimitive(primitive, projectOptions)
         )
       : null;
   })
@@ -33,10 +37,7 @@ export function naivePipeline(
       ctx.strokeStyle = defaultStroke ?? "white";
       ctx.font = defaultFont ?? "inherit";
 
-      const render = renderFnMap[projected.primitive.type] as RenderFn<
-        typeof projected
-      >;
-      render(ctx, projected);
+      renderPrimitive(ctx, projected);
     });
 }
 
@@ -45,28 +46,48 @@ export function fullPipeline(
   projectOptions: ProjectOptions,
   { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
-  Monad.from(primitives)
-    .map(primitives =>
-      filterAndMap(primitives, (primitive: Primitive2D) => {
-        const projectedPrimitive = projectPrimitive(primitive, projectOptions);
-        return isProjectedOnScreen(projectedPrimitive, projectOptions.screenDim)
-          ? tuple(
-              findSqrDist(projectOptions.viewPos, primitive),
-              projectedPrimitive
+  resolveIntersections(primitives)
+    .map((primitive, index) => {
+      const center =
+        primitive.type === "Point"
+          ? primitive.point
+          : Vector.zero(3)
+              .add(...primitive.points)
+              .divide(primitive.points.length);
+      return {
+        primitive,
+        index,
+        center,
+        distToCenterSqr: projectOptions.viewPos
+          .copy()
+          .sub(center)
+          .getSquaredMagnitude(),
+      };
+    })
+    .sort((a, b) => {
+      const sign = a.distToCenterSqr < b.distToCenterSqr ? 1 : -1;
+      const [first, second] = a.index < b.index ? [a, b] : [b, a];
+      if (
+        first.primitive.type === "Polygon" &&
+        second.primitive.type === "Polygon"
+      ) {
+        return (
+          sign *
+          (first.distToCenterSqr -
+            linePlaneIntersection(
+              pointsToLine(projectOptions.viewPos, first.center),
+              pointsToPlane(second.primitive.points)
             )
-          : null;
-      }).sort(([a], [b]) => b.avg - a.avg)
-    )
-    .map(projectedData => {
-      const hiddenIndices = new Set<number>();
-      const resolvedIntersections = filterAndMap(
-        projectedData,
-        ([measurements, projected], _, others) => {
-          return projected.type === "Triangle"
-            ? others.reduce((acc, other) => acc, projected)
-            : projected;
-        }
-      );
-      return resolvedIntersections.filter((_, i) => !hiddenIndices.has(i));
+              .sub(projectOptions.viewPos)
+              .getSquaredMagnitude())
+        );
+      }
+      return sign * (b.distToCenterSqr - a.distToCenterSqr);
+    })
+    .forEach(({ primitive }) => {
+      ctx.fillStyle = defaultFill ?? "white";
+      ctx.strokeStyle = defaultStroke ?? "white";
+      ctx.font = defaultFont ?? "inherit";
+      renderPrimitive(ctx, projectPrimitive(primitive, projectOptions));
     });
 }

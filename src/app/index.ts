@@ -1,13 +1,14 @@
 import Monad from "../core/monad";
 import { AppContextWithState, appMethods } from "../core/types";
+import { tuple } from "../core/utils";
 import Vector from "../core/Vector";
 import config from "./config";
 import rasterise from "./rasterise";
 import {
-  createLabel,
   createLine,
   createPoint,
-  Primitive1D,
+  createPolygon,
+  Primitive2D,
 } from "./rasterise/types";
 
 // interface Star {
@@ -154,13 +155,9 @@ function animationFrame({
 
   ctx.lineWidth = 3;
 
-  const primitives: Primitive1D[] = [
-    createLabel({
-      text: "Test Cube",
-      point: Vector.create(0, -0.1, 0),
-      font: "30px sans-serif",
-    }),
+  const primitives: Primitive2D[] = [
     createPoint({
+      label: { text: "Test Cube", style: "white", font: "30px sans-serif" },
       point: cubeCenter,
       radius: 30,
       style: ({ projected }) => {
@@ -222,7 +219,7 @@ function animationFrame({
     }
   }
 
-  rasterise.naivePipeline(
+  rasterise.fullPipeline(
     primitives,
     {
       viewPos: Vector.create(

@@ -1,12 +1,8 @@
 import Vector from "../../core/Vector";
 import { isFunction } from "../../core/guard";
-import { checkExhausted, tuple } from "../../core/utils";
-import {
-  StrokeStyle,
-  FillStyle,
-  Primitive2D,
-  ProjectedPrimitive,
-} from "./types";
+import { checkExhausted } from "../../core/utils";
+import { ProjectOptions } from "./project";
+import { StrokeStyle, FillStyle, Primitive2D } from "./types";
 
 export function optSetStroke<A>(
   ctx: CanvasRenderingContext2D,
@@ -33,13 +29,12 @@ export function findSqrDist(
   primitive: Primitive2D
 ): { avg: number; min: number; max: number } {
   switch (primitive.type) {
-    case "Point":
-    case "Label": {
+    case "Point": {
       const avg = fromPos.copy().sub(primitive.point).getSquaredMagnitude();
       return { avg, min: avg, max: avg };
     }
     case "Line":
-    case "Triangle": {
+    case "Polygon": {
       const extremes = primitive.points.reduce(
         (acc, point) => ({
           min: Math.min(
@@ -80,20 +75,34 @@ export function intersect<N extends number>(
   return vecA.lerp(vecB, t);
 }
 
-export function isProjectedOnScreen(
-  projectedPrimitive: ProjectedPrimitive,
-  screenDim: Vector<2>
+export function pointsToPlane([a, b, c]: [
+  Vector<3>,
+  Vector<3>,
+  Vector<3>,
+  ...Vector<3>[],
+]): [Vector<3>, number] {
+  const planeNormal = a.copy().sub(b).crossProduct(a.copy().sub(c));
+  return [planeNormal, -planeNormal.dot(a)];
+}
+
+export function pointsToLine(a: Vector<3>, b: Vector<3>) {
+  return { coefficients: a.copy().sub(b), intersect: b };
+}
+
+export function isPrimitiveOnScreen(
+  _primitive: Primitive2D,
+  { screenDim: _screenDim }: ProjectOptions
 ): boolean {
-  const axes = tuple(screenDim.with(0, 0), screenDim.with(1, 0));
-  switch (projectedPrimitive.type) {
-    case "Point":
-    case "Label":
-      return !projectedPrimitive.projected.some(isNaN);
-    case "Line":
-    case "Triangle":
-      return (
-        projectedPrimitive.projected.length > 0 &&
-        projectedPrimitive.projected.every(projected => !projected.some(isNaN))
-      );
-  }
+  return true;
+  // const axes = tuple(screenDim.with(0, 0), screenDim.with(1, 0));
+  // switch (primitive.type) {
+  //   case "Point":
+  //     return !primitive.projected.some(isNaN);
+  //   case "Line":
+  //   case "Polygon":
+  //     return (
+  //       primitive.projected.length > 0 &&
+  //       primitive.projected.every(projected => !projected.some(isNaN))
+  //     );
+  // }
 }

@@ -15,29 +15,22 @@ export interface ProjectedPoint {
   projected: Vector<2>;
 }
 
-export interface ProjectedLabel {
-  type: "Label";
-  primitive: Label;
-  projected: Vector<2>;
-}
-
 export interface ProjectedLine {
   type: "Line";
   primitive: Line;
   projected: Array<Vector<2>>;
 }
 
-export interface ProjectedTriangle {
-  type: "Triangle";
-  primitive: Triangle;
+export interface ProjectedPolygon {
+  type: "Polygon";
+  primitive: Polygon;
   projected: Array<Vector<2>>;
 }
 
 export type ProjectedPrimitive =
   | ProjectedPoint
-  | ProjectedLabel
   | ProjectedLine
-  | ProjectedTriangle;
+  | ProjectedPolygon;
 
 export type ToProjected<A extends Primitive2D> = {
   [P in ProjectedPrimitive as P["type"]]: P;
@@ -48,15 +41,12 @@ export interface Point {
   point: Vector<3>;
   radius?: number;
   style?: FillStyle<ProjectedPoint>;
-}
-
-export interface Label {
-  type: "Label";
-  point: Vector<3>;
-  text: string;
-  maxWidth?: number;
-  style?: FillStyle<ProjectedLabel>;
-  font?: OptRunnable<ProjectedLabel, string>;
+  label?: {
+    text: string;
+    maxWidth?: number;
+    style?: FillStyle<ProjectedPoint>;
+    font?: OptRunnable<ProjectedPoint, string>;
+  };
 }
 
 export interface Line {
@@ -66,37 +56,29 @@ export interface Line {
   style?: StrokeStyle<ProjectedLine>;
 }
 
-export interface Triangle {
-  type: "Triangle";
-  points: [Vector<3>, Vector<3>, Vector<3>];
-  style?: FillStyle<ProjectedTriangle>;
+export interface Polygon {
+  type: "Polygon";
+  points: [Vector<3>, Vector<3>, Vector<3>, ...Vector<3>[]];
+  style?: FillStyle<ProjectedPolygon>;
 }
 
-export type Primitive1D = Point | Label | Line;
-export type Primitive2D = Primitive1D | Triangle;
+export type Primitive1D = Point | Line;
+export type Primitive2D = Primitive1D | Polygon;
 
 export function createPoint(point: Omit<Point, "type">): Point {
   return { type: "Point", ...point };
-}
-
-export function createLabel(label: Omit<Label, "type">): Label {
-  return { type: "Label", ...label };
 }
 
 export function createLine(line: Omit<Line, "type">): Line {
   return { type: "Line", ...line };
 }
 
-export function createTriangle(triangle: Omit<Triangle, "type">): Triangle {
-  return { type: "Triangle", ...triangle };
+export function createPolygon(polygon: Omit<Polygon, "type">): Polygon {
+  return { type: "Polygon", ...polygon };
 }
 
 export function isPrimitive1D(
   primitive: Primitive2D
 ): primitive is Primitive1D {
-  return (
-    primitive.type === "Point" ||
-    primitive.type === "Label" ||
-    primitive.type === "Line"
-  );
+  return primitive.type === "Point" || primitive.type === "Line";
 }

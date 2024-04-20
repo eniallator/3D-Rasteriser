@@ -1,11 +1,11 @@
 import { isFunction } from "../../core/guard";
+import { checkExhausted } from "../../core/utils";
 import { optSetFill, optSetStroke } from "./helpers";
 import {
   ProjectedPrimitive,
-  ProjectedLabel,
   ProjectedLine,
   ProjectedPoint,
-  ProjectedTriangle,
+  ProjectedPolygon,
 } from "./types";
 
 function renderPoint(
@@ -21,28 +21,23 @@ function renderPoint(
     2 * Math.PI
   );
   ctx.fill();
-}
-
-function renderLabel(
-  ctx: CanvasRenderingContext2D,
-  label: ProjectedLabel
-): void {
-  optSetFill(ctx, label.primitive.style, label);
-  if (label.primitive.font != null) {
-    ctx.font = isFunction(label.primitive.font)
-      ? label.primitive.font(label)
-      : label.primitive.font;
+  const { label } = point.primitive;
+  if (label != null) {
+    if (label.font != null) {
+      ctx.font = isFunction(label.font) ? label.font(point) : label.font;
+    }
+    optSetFill(ctx, label.style, point);
+    const textWidth = ctx.measureText(label.text).width;
+    ctx.fillText(
+      label.text,
+      point.projected.x() -
+        (label.maxWidth != null
+          ? Math.min(textWidth, label.maxWidth) / 2
+          : textWidth / 2),
+      point.projected.y(),
+      label.maxWidth
+    );
   }
-  const textWidth = ctx.measureText(label.primitive.text).width;
-  ctx.fillText(
-    label.primitive.text,
-    label.projected.x() -
-      (label.primitive.maxWidth != null
-        ? Math.min(textWidth, label.primitive.maxWidth) / 2
-        : textWidth / 2),
-    label.projected.y(),
-    label.primitive.maxWidth
-  );
 }
 
 function renderLine(ctx: CanvasRenderingContext2D, line: ProjectedLine): void {
@@ -57,30 +52,33 @@ function renderLine(ctx: CanvasRenderingContext2D, line: ProjectedLine): void {
   ctx.stroke();
 }
 
-function renderTriangle(
+function renderPolygon(
   ctx: CanvasRenderingContext2D,
-  triangle: ProjectedTriangle
+  polygon: ProjectedPolygon
 ): void {
-  optSetFill(ctx, triangle.primitive.style, triangle);
+  optSetFill(ctx, polygon.primitive.style, polygon);
   ctx.beginPath();
-  for (let i = 0; i < triangle.projected.length; i++) {
-    ctx[i === 0 ? "moveTo" : "lineTo"](...triangle.projected[i].toArray());
+  for (let i = 0; i < polygon.projected.length; i++) {
+    ctx[i === 0 ? "moveTo" : "lineTo"](...polygon.projected[i].toArray());
   }
   ctx.fill();
 }
 
-export type RenderFn<P extends ProjectedPrimitive> = (
+export function renderPrimitive(
   ctx: CanvasRenderingContext2D,
-  projected: P
-) => void;
-
-type RenderFns = {
-  [P in ProjectedPrimitive as P["primitive"]["type"]]: RenderFn<P>;
-};
-
-export const renderFnMap: RenderFns = {
-  Label: renderLabel,
-  Line: renderLine,
-  Point: renderPoint,
-  Triangle: renderTriangle,
-};
+  projected: ProjectedPrimitive
+): void {
+  switch (projected.type) {
+    case "Point":
+      renderPoint(ctx, projected);
+      break;
+    case "Line":
+      renderLine(ctx, projected);
+      break;
+    case "Polygon":
+      renderPolygon(ctx, projected);
+      break;
+    default:
+      return checkExhausted(projected);
+  }
+}

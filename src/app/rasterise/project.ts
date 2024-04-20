@@ -50,14 +50,13 @@ export function projectPrimitive<P extends Primitive2D>(
 ): ToProjected<P> {
   switch (primitive.type) {
     case "Point":
-    case "Label":
       return {
         type: primitive.type,
         primitive,
         projected: project(primitive.point, projectOptions),
       } as ToProjected<P>;
     case "Line":
-    case "Triangle":
+    case "Polygon":
       return {
         type: primitive.type,
         primitive,
