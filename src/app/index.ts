@@ -4,12 +4,7 @@ import { tuple } from "../core/utils";
 import Vector from "../core/Vector";
 import config from "./config";
 import rasterise from "./rasterise";
-import {
-  createLine,
-  createPoint,
-  createPolygon,
-  Primitive2D,
-} from "./rasterise/types";
+import { createPoint, createPolygon, Primitive2D } from "./rasterise/types";
 
 // interface Star {
 //   pos: Vector<3>;
@@ -178,41 +173,23 @@ function animationFrame({
     for (let j = 0; j < 2; j++) {
       const cornerPoint = Vector.create(i, j, (i + j) % 2);
       for (let k = 0; k < 3; k++) {
-        const toPoint = cornerPoint.with(k, (cornerPoint.valueOf(k) + 1) % 2);
+        const points = tuple(
+          cornerPoint,
+          cornerPoint.with(k, (cornerPoint.valueOf(k) + 1) % 2),
+          cornerPoint.with(
+            (k + 1) % 3,
+            (cornerPoint.valueOf((k + 1) % 3) + 1) % 2
+          )
+        );
 
         primitives.push(
-          createLine({
-            points: [
-              processCubeCorner(cornerPoint),
-              processCubeCorner(toPoint),
-            ],
-            style: ({ projected }) => {
-              const gradient = ctx.createLinearGradient(
-                ...projected[0].toArray(),
-                ...projected[1].toArray()
-              );
-              gradient.addColorStop(
-                0,
-                `rgb(${cornerPoint
-                  .copy()
-                  .add(1e-10)
-                  .normalise()
-                  .multiply(3 * 256)
-                  .toArray()
-                  .join(", ")})`
-              );
-              gradient.addColorStop(
-                1,
-                `rgb(${toPoint
-                  .copy()
-                  .add(1e-10)
-                  .normalise()
-                  .multiply(3 * 256)
-                  .toArray()
-                  .join(", ")})`
-              );
-              return gradient;
-            },
+          createPolygon({
+            points: points.map(processCubeCorner) as typeof points,
+            style: `rgb(${points
+              .reduce((acc, point) => acc.lerp(point, 0.5))
+              .multiply(256)
+              .toArray()
+              .join(", ")})`,
           })
         );
       }

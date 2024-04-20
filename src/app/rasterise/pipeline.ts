@@ -1,12 +1,7 @@
 import Vector from "../../core/Vector";
 import { filterAndMap, tuple } from "../../core/utils";
-import {
-  findSqrDist,
-  isPrimitiveOnScreen,
-  pointsToLine,
-  pointsToPlane,
-} from "./helpers";
-import { linePlaneIntersection, resolveIntersections } from "./intersect";
+import { findSqrDist, isPrimitiveOnScreen } from "./helpers";
+import { resolveIntersections } from "./intersect";
 import { ProjectOptions, projectPrimitive } from "./project";
 import { renderPrimitive } from "./render";
 import { Primitive1D, Primitive2D } from "./types";
@@ -47,43 +42,20 @@ export function fullPipeline(
   { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
   resolveIntersections(primitives)
-    .map((primitive, index) => {
-      const center =
-        primitive.type === "Point"
-          ? primitive.point
-          : Vector.zero(3)
-              .add(...primitive.points)
-              .divide(primitive.points.length);
-      return {
-        primitive,
-        index,
-        center,
-        distToCenterSqr: projectOptions.viewPos
-          .copy()
-          .sub(center)
-          .getSquaredMagnitude(),
-      };
-    })
-    .sort((a, b) => {
-      const sign = a.distToCenterSqr < b.distToCenterSqr ? 1 : -1;
-      const [first, second] = a.index < b.index ? [a, b] : [b, a];
-      if (
-        first.primitive.type === "Polygon" &&
-        second.primitive.type === "Polygon"
-      ) {
-        return (
-          sign *
-          (first.distToCenterSqr -
-            linePlaneIntersection(
-              pointsToLine(projectOptions.viewPos, first.center),
-              pointsToPlane(second.primitive.points)
-            )
-              .sub(projectOptions.viewPos)
-              .getSquaredMagnitude())
-        );
-      }
-      return sign * (b.distToCenterSqr - a.distToCenterSqr);
-    })
+    .map(primitive => ({
+      primitive,
+      sqrDist: projectOptions.viewPos
+        .copy()
+        .sub(
+          primitive.type === "Point"
+            ? primitive.point
+            : Vector.zero(3)
+                .add(...primitive.points)
+                .divide(primitive.points.length)
+        )
+        .getSquaredMagnitude(),
+    }))
+    .sort((a, b) => b.sqrDist - a.sqrDist)
     .forEach(({ primitive }) => {
       ctx.fillStyle = defaultFill ?? "white";
       ctx.strokeStyle = defaultStroke ?? "white";
