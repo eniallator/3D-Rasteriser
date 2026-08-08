@@ -2,12 +2,8 @@ import { tuple } from "niall-utils/core";
 import { mapFilter } from "niall-utils/functional";
 import { Vector } from "vectyped";
 
-import {
-  findSqrDist,
-  isPrimitiveOnScreen,
-  planeSide,
-  pointsToPlane,
-} from "./helpers";
+import { isPrimitiveOnScreen } from "./culling";
+import { findSqrDist, planeSide, pointsToPlane } from "./helpers";
 import { resolveIntersections } from "./intersect";
 import { projectPrimitive, type ProjectOptions } from "./project";
 import { renderPrimitive } from "./render";
@@ -26,11 +22,9 @@ export function naivePipeline(
   { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
   mapFilter(primitives, (primitive: Primitive1D) => {
-    return isPrimitiveOnScreen(primitive, projectOptions)
-      ? tuple(
-          findSqrDist(projectOptions.viewPos, primitive).avg,
-          projectPrimitive(primitive, projectOptions)
-        )
+    const projected = projectPrimitive(primitive, projectOptions);
+    return isPrimitiveOnScreen(projected, projectOptions)
+      ? tuple(findSqrDist(projectOptions.viewPos, primitive).avg, projected)
       : null;
   })
     .sort(([a], [b]) => b - a)
@@ -49,26 +43,29 @@ export function fullPipeline(
   { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
   resolveIntersections(primitives)
-    .map(primitive => ({
-      primitive,
-      center:
+    .map(primitive => projectPrimitive(primitive, projectOptions))
+    .filter(projected => isPrimitiveOnScreen(projected, projectOptions))
+    .map(projected => {
+      const { primitive } = projected;
+      const center =
         primitive.type === "Point"
           ? primitive.point
           : Vector.zero(3)
               .add(...primitive.points)
-              .divide(primitive.points.length),
-      sqrDist: projectOptions.viewPos.sqrDistTo(
-        primitive.type === "Point"
-          ? primitive.point
-          : Vector.zero(3)
-              .add(...primitive.points)
-              .divide(primitive.points.length)
-      ),
-    }))
+              .divide(primitive.points.length);
+      return {
+        projected,
+        center,
+        sqrDist: projectOptions.viewPos.sqrDistTo(center),
+      };
+    })
     .sort((a, b) => {
-      if (a.primitive.type === "Polygon" && b.primitive.type === "Polygon") {
-        const aPlane = pointsToPlane(a.primitive.points);
-        const bPlane = pointsToPlane(b.primitive.points);
+      if (
+        a.projected.primitive.type === "Polygon" &&
+        b.projected.primitive.type === "Polygon"
+      ) {
+        const aPlane = pointsToPlane(a.projected.primitive.points);
+        const bPlane = pointsToPlane(b.projected.primitive.points);
 
         const eyeSideA = planeSide(projectOptions.viewPos, aPlane);
         const bSideA = planeSide(b.center, aPlane);
@@ -87,10 +84,10 @@ export function fullPipeline(
         return b.sqrDist - a.sqrDist;
       }
     })
-    .forEach(({ primitive }) => {
+    .forEach(({ projected }) => {
       ctx.fillStyle = defaultFill ?? "white";
       ctx.strokeStyle = defaultStroke ?? "white";
       ctx.font = defaultFont ?? "inherit";
-      renderPrimitive(ctx, projectPrimitive(primitive, projectOptions));
+      renderPrimitive(ctx, projected);
     });
 }

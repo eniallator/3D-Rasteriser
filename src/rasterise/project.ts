@@ -11,7 +11,7 @@ export interface ProjectOptions {
   screenDim: Vector<2>;
 }
 
-function project(
+export function project(
   point: Vector<3>,
   { viewPos, dirNorm, fov, screenDim }: ProjectOptions
 ): Vector<2> {

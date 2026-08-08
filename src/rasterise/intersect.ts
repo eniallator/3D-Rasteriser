@@ -28,9 +28,7 @@ function intersectPolygons(
     };
     return dist;
   });
-  // Require points genuinely on both sides of each plane (not just touching
-  // it), otherwise polygons that merely share an edge (e.g. adjacent cube
-  // faces) get misclassified as intersecting.
+
   return aMinMax.min < -IMPRECISION_THRESHOLD &&
     aMinMax.max > IMPRECISION_THRESHOLD &&
     bMinMax.min < -IMPRECISION_THRESHOLD &&

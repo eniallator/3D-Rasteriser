@@ -3,7 +3,6 @@ import { checkExhausted } from "niall-utils/core";
 import type { Vector } from "vectyped";
 
 import { linePlaneIntersection } from "./intersect";
-import type { ProjectOptions } from "./project";
 import type { FillStyle, Primitive2D, StrokeStyle } from "./types";
 
 export const IMPRECISION_THRESHOLD = 1e-5;
@@ -95,24 +94,6 @@ export function planeSide(
   return Math.abs(dist) < IMPRECISION_THRESHOLD
     ? 0
     : (Math.sign(dist) as -1 | 1);
-}
-
-export function isPrimitiveOnScreen(
-  _primitive: Primitive2D,
-  { screenDim: _screenDim }: ProjectOptions
-): boolean {
-  return true;
-  // const axes = tuple(screenDim.with(0, 0), screenDim.with(1, 0));
-  // switch (primitive.type) {
-  //   case "Point":
-  //     return !primitive.projected.some(isNaN);
-  //   case "Line":
-  //   case "Polygon":
-  //     return (
-  //       primitive.projected.length > 0 &&
-  //       primitive.projected.every(projected => !projected.some(isNaN))
-  //     );
-  // }
 }
 
 export function closestPointOnPlane(
