@@ -2,7 +2,7 @@ import { tuple } from "niall-utils/core";
 import { mapFilter } from "niall-utils/functional";
 import { Vector } from "vectyped";
 
-import { isPrimitiveOnScreen } from "./culling";
+import { clipPrimitivesToCamera, isPrimitiveOnScreen } from "./clip";
 import { findSqrDist, planeSide, pointsToPlane } from "./helpers";
 import { resolveIntersections } from "./intersect";
 import { projectPrimitive, type ProjectOptions } from "./project";
@@ -21,12 +21,15 @@ export function naivePipeline(
   projectOptions: ProjectOptions,
   { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
-  mapFilter(primitives, (primitive: Primitive1D) => {
-    const projected = projectPrimitive(primitive, projectOptions);
-    return isPrimitiveOnScreen(projected, projectOptions)
-      ? tuple(findSqrDist(projectOptions.viewPos, primitive).avg, projected)
-      : null;
-  })
+  mapFilter(
+    clipPrimitivesToCamera(primitives, projectOptions) as Primitive1D[],
+    (primitive: Primitive1D) => {
+      const projected = projectPrimitive(primitive, projectOptions);
+      return isPrimitiveOnScreen(projected, projectOptions)
+        ? tuple(findSqrDist(projectOptions.viewPos, primitive).avg, projected)
+        : null;
+    }
+  )
     .sort(([a], [b]) => b - a)
     .forEach(([_, projected]) => {
       ctx.fillStyle = defaultFill ?? "white";
@@ -42,7 +45,10 @@ export function fullPipeline(
   projectOptions: ProjectOptions,
   { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
-  resolveIntersections(primitives)
+  resolveIntersections(
+    clipPrimitivesToCamera(primitives, projectOptions),
+    projectOptions
+  )
     .map(primitive => projectPrimitive(primitive, projectOptions))
     .filter(projected => isPrimitiveOnScreen(projected, projectOptions))
     .map(projected => {
