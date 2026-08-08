@@ -1,35 +1,33 @@
+import url, { URL } from "node:url";
 import BrowserSyncPlugin from "browser-sync-webpack-plugin";
-import url from "url";
+import TerserPlugin from "terser-webpack-plugin";
 
-const currDir = url.fileURLToPath(new URL(".", import.meta.url));
+const path = url.fileURLToPath(new URL(".", import.meta.url));
+
+const mode = process.env.NODE_ENV ?? "development";
 
 export default {
-  devtool: "eval-source-map",
-  mode: "development",
+  mode,
 
   entry: "./src/init.ts",
 
-  output: {
-    path: currDir,
-    publicPath: "public",
-    filename: "public/bundle.js",
-  },
+  resolve: { extensions: [".ts", ".js"] },
 
-  plugins: [
-    new BrowserSyncPlugin({
-      host: "localhost",
-      port: 3000,
-      server: {
-        baseDir: "public",
-        reload: ["*.ts", "*.js", "*.html", "*.css"],
-      },
-      reload: ["*.ts", "*.js", "*.html", "*.css"],
-    }),
-  ],
+  output: { path, publicPath: "public", filename: "public/bundle.js" },
 
-  resolve: {
-    extensions: [".ts", ".js"],
-  },
+  ...(mode === "development"
+    ? { devtool: "eval-source-map" }
+    : {
+        optimization: {
+          minimize: true,
+          minimizer: [
+            new TerserPlugin({
+              include: "public/bundle.js",
+              terserOptions: { mangle: true },
+            }),
+          ],
+        },
+      }),
 
   module: {
     rules: [
@@ -45,4 +43,13 @@ export default {
       },
     ],
   },
+
+  plugins: [
+    new BrowserSyncPlugin({
+      host: "localhost",
+      port: 3000,
+      server: { baseDir: "public" },
+      files: ["**/*.ts"],
+    }),
+  ],
 };

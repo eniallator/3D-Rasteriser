@@ -1,7 +1,8 @@
-import Vector from "../../core/Vector";
-import { checkExhausted } from "../../core/utils";
+import { checkExhausted } from "niall-utils";
+import { Vector } from "vectyped";
+
 import { intersect } from "./helpers";
-import { Primitive2D, ToProjected } from "./types";
+import type { Primitive2D, ToProjected } from "./types";
 
 export interface ProjectOptions {
   viewPos: Vector<3>;
@@ -16,9 +17,7 @@ function project(
 ): Vector<2> {
   const screenCenterPos = dirNorm.copy().setMagnitude(1 / fov);
   const pointNorm = point.copy().sub(viewPos).getNorm();
-  const t =
-    screenCenterPos.multiply(dirNorm).sum() /
-    pointNorm.copy().multiply(dirNorm).sum();
+  const t = screenCenterPos.dot(dirNorm) / pointNorm.dot(dirNorm);
   const pointOnPlane = pointNorm.multiply(t);
   const xAxis = dirNorm.crossProduct(Vector.create(0, 1, 0));
   const yAxis = dirNorm.crossProduct(xAxis);

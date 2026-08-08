@@ -1,11 +1,12 @@
-import { isFunction } from "../../core/guard";
-import { checkExhausted } from "../../core/utils";
+import { isFunction } from "deep-guards";
+import { checkExhausted } from "niall-utils/core";
+
 import { optSetFill, optSetStroke } from "./helpers";
-import {
-  ProjectedPrimitive,
+import type {
   ProjectedLine,
   ProjectedPoint,
   ProjectedPolygon,
+  ProjectedPrimitive,
 } from "./types";
 
 function renderPoint(
@@ -46,8 +47,8 @@ function renderLine(ctx: CanvasRenderingContext2D, line: ProjectedLine): void {
   }
   optSetStroke(ctx, line.primitive.style, line);
   ctx.beginPath();
-  for (let i = 0; i < line.projected.length; i++) {
-    ctx[i === 0 ? "moveTo" : "lineTo"](...line.projected[i].toArray());
+  for (const [i, projected] of line.projected.entries()) {
+    ctx[i === 0 ? "moveTo" : "lineTo"](...projected.toArray());
   }
   ctx.stroke();
 }
@@ -58,8 +59,8 @@ function renderPolygon(
 ): void {
   optSetFill(ctx, polygon.primitive.style, polygon);
   ctx.beginPath();
-  for (let i = 0; i < polygon.projected.length; i++) {
-    ctx[i === 0 ? "moveTo" : "lineTo"](...polygon.projected[i].toArray());
+  for (const [i, projected] of polygon.projected.entries()) {
+    ctx[i === 0 ? "moveTo" : "lineTo"](...projected.toArray());
   }
   ctx.fill();
 }

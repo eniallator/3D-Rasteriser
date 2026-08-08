@@ -1,4 +1,4 @@
-import { naivePipeline, fullPipeline } from "./pipeline";
+import { fullPipeline, naivePipeline } from "./pipeline";
 import { projectPrimitive } from "./project";
 
 export default {

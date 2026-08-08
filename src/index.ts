@@ -1,10 +1,15 @@
-import Monad from "../core/monad";
-import { AppContextWithState, appMethods } from "../core/types";
-import { tuple } from "../core/utils";
-import Vector from "../core/Vector";
-import config from "./config";
+import { tuple } from "niall-utils/core";
+import { Monad } from "niall-utils/functional";
+import { Vector } from "vectyped";
+
+import type { Config } from "./config.ts";
+import { appMethods, type StatefulAppContext } from "./lib/types.ts";
 import rasterise from "./rasterise";
-import { createPoint, createPolygon, Primitive2D } from "./rasterise/types";
+import {
+  createPoint,
+  createPolygon,
+  type Primitive2D,
+} from "./rasterise/types";
 
 // interface Star {
 //   pos: Vector<3>;
@@ -119,20 +124,22 @@ interface CubeState {
 // });
 
 function animationFrame({
-  paramConfig,
+  seriform,
   ctx,
   canvas,
-  state,
+  getState,
   time,
-}: AppContextWithState<typeof config, CubeState>) {
-  const { dirNorm } = state;
+}: StatefulAppContext<Config, CubeState>) {
+  const { dirNorm } = getState();
   ctx.strokeStyle = "white";
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const cubeAngle =
-    (((time.now - time.animationStart) * paramConfig.getVal("speed")) / 100) %
-    (Math.PI * 2);
+  const progress = (time.now - time.start) * seriform.getValue("speed");
+  // const timeProgress = (Math.PI * 3) / 2;
+  // const progress = ((Math.PI * 1) / 2) * paramConfig.getVal("speed");
+
+  const cubeAngle = progress % (Math.PI * 2);
   const cubeCenter = Vector.zero(3);
 
   // point components are either 0 or 1
@@ -146,7 +153,7 @@ function animationFrame({
         return Vector.create(rotX, rotY, z);
       })
       .map(point => point.add(cubeCenter))
-      .value();
+      .get();
 
   ctx.lineWidth = 3;
 
@@ -185,9 +192,10 @@ function animationFrame({
         primitives.push(
           createPolygon({
             points: points.map(processCubeCorner) as typeof points,
-            style: `rgb(${points
-              .reduce((acc, point) => acc.lerp(point, 0.5))
-              .multiply(256)
+            style: `rgb(${Vector.zero(3)
+              .add(...points)
+              .divide(points.length)
+              .multiply(255)
               .toArray()
               .join(", ")})`,
           })
@@ -201,24 +209,18 @@ function animationFrame({
     {
       viewPos: Vector.create(
         -2.5,
-        Math.cos(
-          ((time.now - time.animationStart) * paramConfig.getVal("speed")) / 100
-        ) / 1.5,
-        Math.sin(
-          ((time.now - time.animationStart) * paramConfig.getVal("speed")) / 100
-        ) / 1.5
+        Math.cos(progress) / 1.5,
+        Math.sin(progress) / 1.5
       ),
       dirNorm,
-      fov: paramConfig.getVal("fov"),
+      fov: seriform.getValue("fov"),
       screenDim: Vector.create(canvas.width, canvas.height),
     },
     { ctx }
   );
-
-  return { dirNorm };
 }
 
-export default appMethods.stateful<typeof config, CubeState>({
+export const app = appMethods<Config, CubeState>({
   init: () => ({
     points: [],
     dirNorm: Vector.create(1, 0, 0),

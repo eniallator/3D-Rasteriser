@@ -1,4 +1,4 @@
-import Vector from "../../core/Vector";
+import type { Vector } from "vectyped";
 
 type OptRunnable<A, R> = R | ((args: A) => R);
 
@@ -28,9 +28,7 @@ export interface ProjectedPolygon {
 }
 
 export type ProjectedPrimitive =
-  | ProjectedPoint
-  | ProjectedLine
-  | ProjectedPolygon;
+  ProjectedPoint | ProjectedLine | ProjectedPolygon;
 
 export type ToProjected<A extends Primitive2D> = {
   [P in ProjectedPrimitive as P["type"]]: P;
