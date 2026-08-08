@@ -11,10 +11,10 @@ import {
   type ProjectedPrimitive,
 } from "./types";
 
-function cameraPlane({
-  viewPos,
-  dirNorm,
-}: ProjectOptions): { norm: Vector<3>; d: number } {
+function cameraPlane({ viewPos, dirNorm }: ProjectOptions): {
+  norm: Vector<3>;
+  d: number;
+} {
   return { norm: dirNorm, d: -dirNorm.dot(viewPos) };
 }
 
@@ -34,9 +34,10 @@ function clipLineToPlane(
   line: Line,
   plane: { norm: Vector<3>; d: number }
 ): Line[] {
-  const points = line.points.map(
-    (point): PointDist => ({ point, dist: signedDistance(point, plane) })
-  );
+  const points = line.points.map((point): PointDist => ({
+    point,
+    dist: signedDistance(point, plane),
+  }));
   if (points.length === 0) return [];
 
   const first = points.at(0) as PointDist;
@@ -83,8 +84,6 @@ function clipPolygonToPlane(
   });
 }
 
-// Discards anything entirely behind the camera and cuts primitives that
-// straddle the near plane so only the in-front portion survives.
 export function clipPrimitivesToCamera(
   primitives: Primitive2D[],
   projectOptions: ProjectOptions
@@ -104,7 +103,43 @@ export function clipPrimitivesToCamera(
   });
 }
 
-// TODO: Doesn't take into account the edges which could overlap the viewport
+function clipParamRange(
+  p0: number,
+  p1: number,
+  min: number,
+  max: number,
+  tMin: number,
+  tMax: number
+): [number, number] | null {
+  const d = p1 - p0;
+  if (d === 0) {
+    return p0 >= min && p0 <= max ? [tMin, tMax] : null;
+  }
+  const [t0, t1] =
+    d > 0 ? [(min - p0) / d, (max - p0) / d] : [(max - p0) / d, (min - p0) / d];
+  const newTMin = Math.max(tMin, t0);
+  const newTMax = Math.min(tMax, t1);
+  return newTMin <= newTMax ? [newTMin, newTMax] : null;
+}
+
+function segmentOverlapsScreen(
+  p0: Vector<2>,
+  p1: Vector<2>,
+  screenDim: Vector<2>
+): boolean {
+  const xRange = clipParamRange(p0.x(), p1.x(), 0, screenDim.x(), 0, 1);
+  if (xRange == null) return false;
+  const yRange = clipParamRange(
+    p0.y(),
+    p1.y(),
+    0,
+    screenDim.y(),
+    xRange[0],
+    xRange[1]
+  );
+  return yRange != null;
+}
+
 export function isPrimitiveOnScreen(
   projected: ProjectedPrimitive,
   projectOptions: ProjectOptions
@@ -112,7 +147,20 @@ export function isPrimitiveOnScreen(
   if (projected.type === "Point") {
     return projected.projected.inBounds(projectOptions.screenDim);
   }
-  return projected.projected.some(point =>
-    point.inBounds(projectOptions.screenDim)
-  );
+
+  const points = projected.projected;
+  if (points.some(point => point.inBounds(projectOptions.screenDim))) {
+    return true;
+  }
+
+  const edgeCount =
+    projected.type === "Polygon" ? points.length : points.length - 1;
+  for (let i = 0; i < edgeCount; i++) {
+    const start = points.at(i) as Vector<2>;
+    const end = points.at((i + 1) % points.length) as Vector<2>;
+    if (segmentOverlapsScreen(start, end, projectOptions.screenDim)) {
+      return true;
+    }
+  }
+  return false;
 }
