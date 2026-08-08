@@ -108,23 +108,109 @@ function splitPolygonByPlane(
   return { front, back };
 }
 
-export function buildBSPTree(primitives: Primitive2D[]): BSPNode {
-  const splitterIndex = primitives.findIndex(
-    primitive => primitive.type === "Polygon"
+function classifySideOnly(points: Vector<3>[], plane: Plane): Side {
+  let hasFront = false;
+  let hasBack = false;
+  for (const point of points) {
+    const dist = plane.norm.dot(point) + plane.d;
+    if (dist > IMPRECISION_THRESHOLD) hasFront = true;
+    else if (dist < -IMPRECISION_THRESHOLD) hasBack = true;
+    if (hasFront && hasBack) return "straddling";
+  }
+  if (hasFront) return "front";
+  if (hasBack) return "back";
+  return "coplanar";
+}
+
+const MAX_SPLITTER_CANDIDATES = 20;
+
+function sampleIndices(poolSize: number, count: number): number[] {
+  if (poolSize <= count) {
+    return Array.from({ length: poolSize }, (_, i) => i);
+  }
+
+  const swapped = new Map<number, number>();
+  const valueAt = (i: number): number => swapped.get(i) ?? i;
+
+  const picked: number[] = [];
+  let remaining = poolSize;
+  for (let i = 0; i < count; i++) {
+    const j = Math.floor(Math.random() * remaining);
+    picked.push(valueAt(j));
+    remaining--;
+    swapped.set(j, valueAt(remaining));
+  }
+  return picked;
+}
+
+function pickBestSplitter(
+  candidates: Polygon[],
+  primitives: Primitive2D[]
+): Polygon {
+  const sampled = sampleIndices(candidates.length, MAX_SPLITTER_CANDIDATES).map(
+    i => candidates[i] as Polygon
   );
-  if (splitterIndex === -1) {
+
+  let best = sampled[0] as Polygon;
+  let bestImbalance = Infinity;
+
+  for (const candidate of sampled) {
+    const plane = pointsToPlane(candidate.points);
+    let front = 0;
+    let back = 0;
+
+    for (const primitive of primitives) {
+      if (primitive === candidate) continue;
+
+      if (primitive.type === "Point") {
+        if (planeSide(primitive.point, plane) >= 0) front++;
+        else back++;
+        continue;
+      }
+
+      switch (classifySideOnly(primitive.points, plane)) {
+        case "front":
+          front++;
+          break;
+        case "back":
+          back++;
+          break;
+        case "straddling":
+          front++;
+          back++;
+          break;
+        case "coplanar":
+          break;
+      }
+    }
+
+    const imbalance = Math.abs(front - back);
+    if (imbalance < bestImbalance) {
+      bestImbalance = imbalance;
+      best = candidate;
+      if (imbalance === 0) break;
+    }
+  }
+
+  return best;
+}
+
+export function buildBSPTree(primitives: Primitive2D[]): BSPNode {
+  const polygonCandidates = primitives.filter(
+    (primitive): primitive is Polygon => primitive.type === "Polygon"
+  );
+  if (polygonCandidates.length === 0) {
     return { type: "leaf", primitives };
   }
 
-  const splitter = primitives.at(splitterIndex) as Polygon;
+  const splitter = pickBestSplitter(polygonCandidates, primitives);
   const plane = pointsToPlane(splitter.points);
   const coplanar: Primitive2D[] = [splitter];
   const front: Primitive2D[] = [];
   const back: Primitive2D[] = [];
 
-  for (let i = 0; i < primitives.length; i++) {
-    if (i === splitterIndex) continue;
-    const primitive = primitives.at(i) as Primitive2D;
+  for (const primitive of primitives) {
+    if (primitive === splitter) continue;
 
     switch (primitive.type) {
       case "Point": {
