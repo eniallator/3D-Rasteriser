@@ -1,9 +1,9 @@
 import { tuple } from "niall-utils/core";
 import { mapFilter } from "niall-utils/functional";
-import { Vector } from "vectyped";
 
+import { buildBSPTree, traverseBackToFront } from "./bsp";
 import { clipPrimitivesToCamera, isPrimitiveOnScreen } from "./clip";
-import { findSqrDist, planeSide, pointsToPlane } from "./helpers";
+import { findSqrDist } from "./helpers";
 import { resolveIntersections } from "./intersect";
 import { projectPrimitive, type ProjectOptions } from "./project";
 import { renderPrimitive } from "./render";
@@ -45,52 +45,16 @@ export function fullPipeline(
   projectOptions: ProjectOptions,
   { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
-  resolveIntersections(
+  const resolved = resolveIntersections(
     clipPrimitivesToCamera(primitives, projectOptions),
     projectOptions
-  )
+  );
+  const tree = buildBSPTree(resolved);
+
+  traverseBackToFront(tree, projectOptions.viewPos)
     .map(primitive => projectPrimitive(primitive, projectOptions))
     .filter(projected => isPrimitiveOnScreen(projected, projectOptions))
-    .map(projected => {
-      const { primitive } = projected;
-      const center =
-        primitive.type === "Point"
-          ? primitive.point
-          : Vector.zero(3)
-              .add(...primitive.points)
-              .divide(primitive.points.length);
-      return {
-        projected,
-        center,
-        sqrDist: projectOptions.viewPos.sqrDistTo(center),
-      };
-    })
-    .sort((a, b) => {
-      if (
-        a.projected.primitive.type === "Polygon" &&
-        b.projected.primitive.type === "Polygon"
-      ) {
-        const aPlane = pointsToPlane(a.projected.primitive.points);
-        const bPlane = pointsToPlane(b.projected.primitive.points);
-
-        const eyeSideA = planeSide(projectOptions.viewPos, aPlane);
-        const bSideA = planeSide(b.center, aPlane);
-        if (eyeSideA !== 0 && bSideA !== 0) {
-          return eyeSideA === bSideA ? -1 : 1;
-        }
-
-        const eyeSideB = planeSide(projectOptions.viewPos, bPlane);
-        const aSideB = planeSide(a.center, bPlane);
-        if (eyeSideB !== 0 && aSideB !== 0) {
-          return eyeSideB === aSideB ? 1 : -1;
-        }
-
-        return b.sqrDist - a.sqrDist;
-      } else {
-        return b.sqrDist - a.sqrDist;
-      }
-    })
-    .forEach(({ projected }) => {
+    .forEach(projected => {
       ctx.fillStyle = defaultFill ?? "white";
       ctx.strokeStyle = defaultStroke ?? "white";
       ctx.font = defaultFont ?? "inherit";

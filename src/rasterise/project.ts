@@ -19,7 +19,7 @@ export function project(
   const pointNorm = point.copy().sub(viewPos).getNorm();
   const t = screenCenterPos.dot(dirNorm) / pointNorm.dot(dirNorm);
   const pointOnPlane = pointNorm.multiply(t);
-  const xAxis = dirNorm.crossProduct(Vector.create(0, 1, 0));
+  const xAxis = dirNorm.crossProduct(Vector.create(0, 1, 0)).normalise();
   const yAxis = dirNorm.crossProduct(xAxis);
 
   const screenStart = {

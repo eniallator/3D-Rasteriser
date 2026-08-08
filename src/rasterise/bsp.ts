@@ -1,0 +1,201 @@
+import { checkExhausted } from "niall-utils";
+import { Vector } from "vectyped";
+
+import { IMPRECISION_THRESHOLD, planeSide, pointsToPlane } from "./helpers";
+import { cutPolygonSignedDistances } from "./intersect";
+import { createLine, type Line, type Polygon, type Primitive2D } from "./types";
+
+type Plane = { norm: Vector<3>; d: number };
+
+export type BSPNode =
+  | { type: "leaf"; primitives: Primitive2D[] }
+  | {
+      type: "split";
+      plane: Plane;
+      coplanar: Primitive2D[];
+      front: BSPNode;
+      back: BSPNode;
+    };
+
+function classifyPoints(
+  points: Vector<3>[],
+  plane: Plane
+): "front" | "back" | "coplanar" | "straddling" {
+  let hasFront = false;
+  let hasBack = false;
+  for (const point of points) {
+    const dist = plane.norm.dot(point) + plane.d;
+    if (dist > IMPRECISION_THRESHOLD) hasFront = true;
+    else if (dist < -IMPRECISION_THRESHOLD) hasBack = true;
+  }
+  if (hasFront && hasBack) return "straddling";
+  if (hasFront) return "front";
+  if (hasBack) return "back";
+  return "coplanar";
+}
+
+interface PointDist {
+  point: Vector<3>;
+  dist: number;
+}
+
+function splitLineByPlane(
+  line: Line,
+  plane: Plane
+): { front: Line[]; back: Line[] } {
+  const points = line.points.map((point): PointDist => ({
+    point,
+    dist: plane.norm.dot(point) + plane.d,
+  }));
+  const front: Line[] = [];
+  const back: Line[] = [];
+  if (points.length === 0) return { front, back };
+
+  const first = points.at(0) as PointDist;
+  let current: Vector<3>[] = [first.point];
+  let currentIsFront = first.dist >= 0;
+
+  const flush = (): void => {
+    if (current.length > 1) {
+      (currentIsFront ? front : back).push(
+        createLine({ ...line, points: current })
+      );
+    }
+  };
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const curr = points.at(i) as PointDist;
+    const next = points.at(i + 1) as PointDist;
+    const nextIsFront = next.dist >= 0;
+
+    if (curr.dist >= 0 !== nextIsFront) {
+      const crossing = curr.point
+        .copy()
+        .lerp(curr.dist / (curr.dist - next.dist), next.point);
+      current.push(crossing);
+      flush();
+      current = [crossing];
+      currentIsFront = nextIsFront;
+    }
+    current.push(next.point);
+  }
+  flush();
+
+  return { front, back };
+}
+
+function splitPolygonByPlane(
+  polygon: Polygon,
+  plane: Plane
+): { front: Polygon[]; back: Polygon[] } {
+  const signedDistances = polygon.points.map(
+    point => plane.norm.dot(point) + plane.d
+  );
+  const front: Polygon[] = [];
+  const back: Polygon[] = [];
+  for (const piece of cutPolygonSignedDistances(polygon, signedDistances)) {
+    const centroid = Vector.zero(3)
+      .add(...piece.points)
+      .divide(piece.points.length);
+    (planeSide(centroid, plane) >= 0 ? front : back).push(piece);
+  }
+  return { front, back };
+}
+
+export function buildBSPTree(primitives: Primitive2D[]): BSPNode {
+  const splitterIndex = primitives.findIndex(
+    primitive => primitive.type === "Polygon"
+  );
+  if (splitterIndex === -1) {
+    return { type: "leaf", primitives };
+  }
+
+  const splitter = primitives[splitterIndex] as Polygon;
+  const plane = pointsToPlane(splitter.points);
+  const coplanar: Primitive2D[] = [splitter];
+  const front: Primitive2D[] = [];
+  const back: Primitive2D[] = [];
+
+  for (let i = 0; i < primitives.length; i++) {
+    if (i === splitterIndex) continue;
+    const primitive = primitives.at(i) as Primitive2D;
+
+    switch (primitive.type) {
+      case "Point": {
+        const side = planeSide(primitive.point, plane);
+        (side >= 0 ? front : back).push(primitive);
+        break;
+      }
+      case "Line": {
+        switch (classifyPoints(primitive.points, plane)) {
+          case "front":
+            front.push(primitive);
+            break;
+          case "back":
+            back.push(primitive);
+            break;
+          case "coplanar":
+            coplanar.push(primitive);
+            break;
+          case "straddling": {
+            const split = splitLineByPlane(primitive, plane);
+            front.push(...split.front);
+            back.push(...split.back);
+            break;
+          }
+        }
+        break;
+      }
+      case "Polygon": {
+        switch (classifyPoints(primitive.points, plane)) {
+          case "front":
+            front.push(primitive);
+            break;
+          case "back":
+            back.push(primitive);
+            break;
+          case "coplanar":
+            coplanar.push(primitive);
+            break;
+          case "straddling": {
+            const split = splitPolygonByPlane(primitive, plane);
+            front.push(...split.front);
+            back.push(...split.back);
+            break;
+          }
+        }
+        break;
+      }
+      default:
+        checkExhausted(primitive);
+    }
+  }
+
+  return {
+    type: "split",
+    plane,
+    coplanar,
+    front: buildBSPTree(front),
+    back: buildBSPTree(back),
+  };
+}
+
+export function traverseBackToFront(
+  node: BSPNode,
+  viewPos: Vector<3>
+): Primitive2D[] {
+  if (node.type === "leaf") return node.primitives;
+
+  const eyeSide = planeSide(viewPos, node.plane);
+  return eyeSide < 0
+    ? [
+        ...traverseBackToFront(node.front, viewPos),
+        ...node.coplanar,
+        ...traverseBackToFront(node.back, viewPos),
+      ]
+    : [
+        ...traverseBackToFront(node.back, viewPos),
+        ...node.coplanar,
+        ...traverseBackToFront(node.front, viewPos),
+      ];
+}
