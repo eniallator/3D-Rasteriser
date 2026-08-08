@@ -1,4 +1,4 @@
-import { checkExhausted } from "niall-utils";
+import { checkExhausted, tuple } from "niall-utils";
 import { Vector } from "vectyped";
 
 import { IMPRECISION_THRESHOLD, planeSide, pointsToPlane } from "./helpers";
@@ -13,6 +13,10 @@ import {
 } from "./types";
 
 type Side = "front" | "back" | "coplanar" | "straddling";
+
+const foldSide = (side: Side, sideFn: Partial<Record<Side, () => void>>) => {
+  sideFn[side]?.();
+};
 
 interface Classification {
   side: Side;
@@ -138,18 +142,23 @@ function sampleIndices(poolSize: number, count: number): number[] {
   return picked;
 }
 
-function pickBestSplitter(
-  candidates: Polygon[],
-  primitives: Primitive2D[]
-): Polygon {
-  const sampled = sampleIndices(candidates.length, MAX_SPLITTER_CANDIDATES).map(
-    i => candidates[i] as Polygon
-  );
+type PrimitiveEntry = [number, Primitive2D];
+type PolygonEntry = [number, Polygon];
 
-  let best = sampled[0] as Polygon;
+function pickBestSplitter(
+  candidateEntries: PolygonEntry[],
+  primitives: Primitive2D[]
+): PolygonEntry {
+  const sampled = sampleIndices(
+    candidateEntries.length,
+    MAX_SPLITTER_CANDIDATES
+  ).map(i => candidateEntries[i] as PolygonEntry);
+
+  let best = sampled[0] as PolygonEntry;
   let bestImbalance = Infinity;
 
-  for (const candidate of sampled) {
+  for (const candidateEntry of sampled) {
+    const [, candidate] = candidateEntry;
     const plane = pointsToPlane(candidate.points);
     let front = 0;
     let back = 0;
@@ -163,26 +172,20 @@ function pickBestSplitter(
         continue;
       }
 
-      switch (classifySideOnly(primitive.points, plane)) {
-        case "front":
-          front++;
-          break;
-        case "back":
-          back++;
-          break;
-        case "straddling":
+      foldSide(classifySideOnly(primitive.points, plane), {
+        front: () => front++,
+        back: () => back++,
+        straddling: () => {
           front++;
           back++;
-          break;
-        case "coplanar":
-          break;
-      }
+        },
+      });
     }
 
     const imbalance = Math.abs(front - back);
     if (imbalance < bestImbalance) {
       bestImbalance = imbalance;
-      best = candidate;
+      best = candidateEntry;
       if (imbalance === 0) break;
     }
   }
@@ -190,69 +193,72 @@ function pickBestSplitter(
   return best;
 }
 
-export function buildBSPTree(primitives: Primitive2D[]): BSPNode {
-  const polygonCandidates = primitives.filter(
-    (primitive): primitive is Polygon => primitive.type === "Polygon"
+function buildBSPTreeEntries(primitiveEntries: PrimitiveEntry[]): BSPNode {
+  const polygonEntries = primitiveEntries.filter(
+    (entry): entry is PolygonEntry => entry[1].type === "Polygon"
   );
-  if (polygonCandidates.length === 0) {
-    return { type: "leaf", primitives };
+  if (polygonEntries.length === 0) {
+    return {
+      type: "leaf",
+      primitives: primitiveEntries.map(([, primitive]) => primitive),
+    };
   }
 
-  const splitter = pickBestSplitter(polygonCandidates, primitives);
+  const primitives = primitiveEntries.map(([, primitive]) => primitive);
+  const [splitterIndex, splitter] = pickBestSplitter(
+    polygonEntries,
+    primitives
+  );
   const plane = pointsToPlane(splitter.points);
-  const coplanar: Primitive2D[] = [splitter];
-  const front: Primitive2D[] = [];
-  const back: Primitive2D[] = [];
+  const coplanarEntries: PrimitiveEntry[] = [tuple(splitterIndex, splitter)];
+  const frontEntries: PrimitiveEntry[] = [];
+  const backEntries: PrimitiveEntry[] = [];
 
-  for (const primitive of primitives) {
+  for (const [originalIndex, primitive] of primitiveEntries) {
     if (primitive === splitter) continue;
 
     switch (primitive.type) {
       case "Point": {
         const side = planeSide(primitive.point, plane);
-        (side >= 0 ? front : back).push(primitive);
+        (side >= 0 ? frontEntries : backEntries).push(
+          tuple(originalIndex, primitive)
+        );
         break;
       }
       case "Line": {
         const { side, distances } = classifyPoints(primitive.points, plane);
-        switch (side) {
-          case "front":
-            front.push(primitive);
-            break;
-          case "back":
-            back.push(primitive);
-            break;
-          case "coplanar":
-            coplanar.push(primitive);
-            break;
-          case "straddling": {
+        foldSide(side, {
+          front: () => frontEntries.push(tuple(originalIndex, primitive)),
+          back: () => backEntries.push(tuple(originalIndex, primitive)),
+          coplanar: () => coplanarEntries.push(tuple(originalIndex, primitive)),
+          straddling: () => {
             const split = splitLineByPlane(primitive, distances);
-            front.push(...split.front);
-            back.push(...split.back);
-            break;
-          }
-        }
+            frontEntries.push(
+              ...split.front.map(line => tuple(originalIndex, line))
+            );
+            backEntries.push(
+              ...split.back.map(line => tuple(originalIndex, line))
+            );
+          },
+        });
         break;
       }
       case "Polygon": {
         const { side, distances } = classifyPoints(primitive.points, plane);
-        switch (side) {
-          case "front":
-            front.push(primitive);
-            break;
-          case "back":
-            back.push(primitive);
-            break;
-          case "coplanar":
-            coplanar.push(primitive);
-            break;
-          case "straddling": {
+        foldSide(side, {
+          front: () => frontEntries.push(tuple(originalIndex, primitive)),
+          back: () => backEntries.push(tuple(originalIndex, primitive)),
+          coplanar: () => coplanarEntries.push(tuple(originalIndex, primitive)),
+          straddling: () => {
             const split = splitPolygonByPlane(primitive, distances, plane);
-            front.push(...split.front);
-            back.push(...split.back);
-            break;
-          }
-        }
+            frontEntries.push(
+              ...split.front.map(poly => tuple(originalIndex, poly))
+            );
+            backEntries.push(
+              ...split.back.map(poly => tuple(originalIndex, poly))
+            );
+          },
+        });
         break;
       }
       default:
@@ -260,13 +266,19 @@ export function buildBSPTree(primitives: Primitive2D[]): BSPNode {
     }
   }
 
+  coplanarEntries.sort(([a], [b]) => a - b);
+
   return {
     type: "branch",
     plane,
-    coplanar,
-    left: buildBSPTree(front),
-    right: buildBSPTree(back),
+    coplanar: coplanarEntries.map(([, primitive]) => primitive),
+    left: buildBSPTreeEntries(frontEntries),
+    right: buildBSPTreeEntries(backEntries),
   };
+}
+
+export function buildBSPTree(primitives: Primitive2D[]): BSPNode {
+  return buildBSPTreeEntries(primitives.entries().toArray());
 }
 
 export function traverseBackToFront(
