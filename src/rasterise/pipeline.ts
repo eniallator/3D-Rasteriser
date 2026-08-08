@@ -3,10 +3,9 @@ import { mapFilter } from "niall-utils/functional";
 import { Vector } from "vectyped";
 
 import {
-  closestPointOnPlane,
   findSqrDist,
-  IMPRECISION_THRESHOLD,
   isPrimitiveOnScreen,
+  planeSide,
   pointsToPlane,
 } from "./helpers";
 import { resolveIntersections } from "./intersect";
@@ -58,19 +57,6 @@ export function fullPipeline(
           : Vector.zero(3)
               .add(...primitive.points)
               .divide(primitive.points.length),
-      // plane:
-      //   primitive.type === "Polygon"
-      //     ? pointsToPlane(primitive.points)
-      //     : primitive.type === "Line"
-      //       ? tuple(
-      //           primitive.points[1].copy().sub(primitive.points[0]).normalise(),
-      //           primitive.points[1]
-      //             .copy()
-      //             .sub(primitive.points[0])
-      //             .normalise()
-      //             .dot(primitive.points[0])
-      //         )
-      //       : tuple(Vector.zero(3), 0),
       sqrDist: projectOptions.viewPos.sqrDistTo(
         primitive.type === "Point"
           ? primitive.point
@@ -83,88 +69,20 @@ export function fullPipeline(
       if (a.primitive.type === "Polygon" && b.primitive.type === "Polygon") {
         const aPlane = pointsToPlane(a.primitive.points);
         const bPlane = pointsToPlane(b.primitive.points);
-        const normDiff = aPlane.norm.copy().sub(bPlane.norm);
-        if (normDiff.abs().every(n => n > IMPRECISION_THRESHOLD)) {
-          // const intersectLine = planePlaneIntersection(aPlane, bPlane);
-          // const aValue = pointsSameSide(
-          //   projectOptions.viewPos,
-          //   a.center,
-          //   intersectLine
-          // )
-          //   ? 1
-          //   : -1;
-          // const bValue = pointsSameSide(
-          //   projectOptions.viewPos,
-          //   b.center,
-          //   intersectLine
-          // )
-          //   ? 1
-          //   : -1;
-          // const aValue =
-          //   projectOptions.viewPos.copy().sub(a.center).getSquaredMagnitude() -
-          //   projectOptions.viewPos
-          //     .copy()
-          //     .sub(a.center.copy().sub(distToPlane(a.center, bPlane)))
-          //     .getSquaredMagnitude();
-          // const bValue =
-          //   projectOptions.viewPos.copy().sub(b.center).getSquaredMagnitude() -
-          //   projectOptions.viewPos
-          //     .copy()
-          //     .sub(b.center.copy().sub(distToPlane(b.center, aPlane)))
-          //     .getSquaredMagnitude();
-          // return Math.sign(bValue) + Math.sign(aValue);
-          // return (
-          //   Math.sign(
-          //     projectOptions.viewPos.sqrDistTo(b.center) -
-          //       projectOptions.viewPos.sqrDistTo(
-          //         closestPointOnPlane(b.center, aPlane)
-          //       )
-          //   ) -
-          //   Math.sign(
-          //     projectOptions.viewPos.sqrDistTo(a.center) -
-          //       projectOptions.viewPos.sqrDistTo(
-          //         closestPointOnPlane(a.center, bPlane)
-          //       )
-          //   )
-          // );
-          // return (
-          //   projectOptions.viewPos.sqrDistTo(b.center) -
-          //   projectOptions.viewPos.sqrDistTo(
-          //     closestPointOnPlane(b.center, aPlane)
-          //     // b.center.copy().add(
-          //     //   // projectOptions.dirNorm.dot(aPlane.norm) *
-          //     //   distToPlane(b.center, aPlane)
-          //     // )
-          //   )
-          // );
-          // Make a plane with the norm dirNorm, at the point where the 2 poly planes intersect
-          // Get the avg norm of the two planes and then use that instead of the closest point on the plane
-          // return closestPointOnPlane(projectOptions.viewPos, aPlane)
-          //   .sub()
-          //   .dot(projectOptions.dirNorm);
 
-          return (
-            Math.sign(
-              closestPointOnPlane(projectOptions.viewPos, aPlane)
-                .sub(projectOptions.viewPos)
-                .dot(closestPointOnPlane(b.center, aPlane).sub(b.center))
-            ) -
-            Math.sign(
-              closestPointOnPlane(projectOptions.viewPos, bPlane)
-                .sub(projectOptions.viewPos)
-                .dot(closestPointOnPlane(a.center, bPlane).sub(a.center))
-            )
-          );
-        } else {
-          return (
-            projectOptions.viewPos.sqrDistTo(
-              closestPointOnPlane(projectOptions.viewPos, bPlane)
-            ) -
-            projectOptions.viewPos.sqrDistTo(
-              closestPointOnPlane(projectOptions.viewPos, aPlane)
-            )
-          );
+        const eyeSideA = planeSide(projectOptions.viewPos, aPlane);
+        const bSideA = planeSide(b.center, aPlane);
+        if (eyeSideA !== 0 && bSideA !== 0) {
+          return eyeSideA === bSideA ? -1 : 1;
         }
+
+        const eyeSideB = planeSide(projectOptions.viewPos, bPlane);
+        const aSideB = planeSide(a.center, bPlane);
+        if (eyeSideB !== 0 && aSideB !== 0) {
+          return eyeSideB === aSideB ? 1 : -1;
+        }
+
+        return b.sqrDist - a.sqrDist;
       } else {
         return b.sqrDist - a.sqrDist;
       }

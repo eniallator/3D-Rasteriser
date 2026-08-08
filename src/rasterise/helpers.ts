@@ -87,6 +87,16 @@ export function pointsToLine(a: Vector<3>, b: Vector<3>) {
   return { norm: a.copy().sub(b).normalise(), intersect: b };
 }
 
+export function planeSide(
+  point: Vector<3>,
+  plane: { norm: Vector<3>; d: number }
+): -1 | 0 | 1 {
+  const dist = plane.norm.dot(point) + plane.d;
+  return Math.abs(dist) < IMPRECISION_THRESHOLD
+    ? 0
+    : (Math.sign(dist) as -1 | 1);
+}
+
 export function isPrimitiveOnScreen(
   _primitive: Primitive2D,
   { screenDim: _screenDim }: ProjectOptions
