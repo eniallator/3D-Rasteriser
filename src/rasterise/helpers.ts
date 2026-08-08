@@ -1,8 +1,7 @@
 import { isFunction } from "deep-guards";
 import { checkExhausted } from "niall-utils/core";
-import type { Vector } from "vectyped";
+import { Vector } from "vectyped";
 
-import { linePlaneIntersection } from "./intersect";
 import type { FillStyle, Primitive2D, StrokeStyle } from "./types";
 
 export const IMPRECISION_THRESHOLD = 1e-5;
@@ -48,7 +47,9 @@ export function findSqrDist(
       return {
         ...extremes,
         avg: fromPos.sqrDistTo(
-          primitive.points.reduce((acc, point) => acc.lerp(0.5, point))
+          Vector.zero(3)
+            .add(...primitive.points)
+            .divide(primitive.points.length)
         ),
       };
     }
@@ -82,10 +83,6 @@ export function pointsToPlane([a, b, c]: [
   return { norm, d: -norm.dot(a) };
 }
 
-export function pointsToLine(a: Vector<3>, b: Vector<3>) {
-  return { norm: a.copy().sub(b).normalise(), intersect: b };
-}
-
 export function planeSide(
   point: Vector<3>,
   plane: { norm: Vector<3>; d: number }
@@ -94,25 +91,4 @@ export function planeSide(
   return Math.abs(dist) < IMPRECISION_THRESHOLD
     ? 0
     : (Math.sign(dist) as -1 | 1);
-}
-
-export function closestPointOnPlane(
-  point: Vector<3>,
-  plane: { norm: Vector<3>; d: number }
-): Vector<3> {
-  const t =
-    -(plane.norm.dot(point) + plane.d) / plane.norm.getSquaredMagnitude();
-  return point.copy().add(plane.norm.copy().multiply(t));
-}
-
-export function pointsSameSide(
-  a: Vector<3>,
-  b: Vector<3>,
-  line: { norm: Vector<3>; intersect: Vector<3> }
-): boolean {
-  const closestPointOnLine = linePlaneIntersection(line, {
-    norm: line.norm,
-    d: line.norm.dot(b),
-  });
-  return a.sqrDistTo(b) < a.sqrDistTo(closestPointOnLine);
 }

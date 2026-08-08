@@ -74,9 +74,3 @@ export function createLine(line: Omit<Line, "type">): Line {
 export function createPolygon(polygon: Omit<Polygon, "type">): Polygon {
   return { type: "Polygon", ...polygon };
 }
-
-export function isPrimitive1D(
-  primitive: Primitive2D
-): primitive is Primitive1D {
-  return primitive.type === "Point" || primitive.type === "Line";
-}

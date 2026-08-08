@@ -17,21 +17,29 @@ export type BSPNode =
       back: BSPNode;
     };
 
-function classifyPoints(
-  points: Vector<3>[],
-  plane: Plane
-): "front" | "back" | "coplanar" | "straddling" {
-  let hasFront = false;
-  let hasBack = false;
-  for (const point of points) {
-    const dist = plane.norm.dot(point) + plane.d;
-    if (dist > IMPRECISION_THRESHOLD) hasFront = true;
-    else if (dist < -IMPRECISION_THRESHOLD) hasBack = true;
-  }
-  if (hasFront && hasBack) return "straddling";
-  if (hasFront) return "front";
-  if (hasBack) return "back";
-  return "coplanar";
+type Side = "front" | "back" | "coplanar" | "straddling";
+
+interface Classification {
+  side: Side;
+  // signed distance of each point, in the same order - reused by the split
+  // functions below so straddling primitives don't get re-measured.
+  distances: number[];
+}
+
+function classifyPoints(points: Vector<3>[], plane: Plane): Classification {
+  const distances = points.map(point => plane.norm.dot(point) + plane.d);
+  const hasFront = distances.some(dist => dist > IMPRECISION_THRESHOLD);
+  const hasBack = distances.some(dist => dist < -IMPRECISION_THRESHOLD);
+
+  const side: Side =
+    hasFront && hasBack
+      ? "straddling"
+      : hasFront
+        ? "front"
+        : hasBack
+          ? "back"
+          : "coplanar";
+  return { side, distances };
 }
 
 interface PointDist {
@@ -41,11 +49,11 @@ interface PointDist {
 
 function splitLineByPlane(
   line: Line,
-  plane: Plane
+  distances: number[]
 ): { front: Line[]; back: Line[] } {
-  const points = line.points.map((point): PointDist => ({
+  const points = line.points.map((point, i): PointDist => ({
     point,
-    dist: plane.norm.dot(point) + plane.d,
+    dist: distances[i] as number,
   }));
   const front: Line[] = [];
   const back: Line[] = [];
@@ -86,14 +94,12 @@ function splitLineByPlane(
 
 function splitPolygonByPlane(
   polygon: Polygon,
+  distances: number[],
   plane: Plane
 ): { front: Polygon[]; back: Polygon[] } {
-  const signedDistances = polygon.points.map(
-    point => plane.norm.dot(point) + plane.d
-  );
   const front: Polygon[] = [];
   const back: Polygon[] = [];
-  for (const piece of cutPolygonSignedDistances(polygon, signedDistances)) {
+  for (const piece of cutPolygonSignedDistances(polygon, distances)) {
     const centroid = Vector.zero(3)
       .add(...piece.points)
       .divide(piece.points.length);
@@ -110,7 +116,7 @@ export function buildBSPTree(primitives: Primitive2D[]): BSPNode {
     return { type: "leaf", primitives };
   }
 
-  const splitter = primitives[splitterIndex] as Polygon;
+  const splitter = primitives.at(splitterIndex) as Polygon;
   const plane = pointsToPlane(splitter.points);
   const coplanar: Primitive2D[] = [splitter];
   const front: Primitive2D[] = [];
@@ -127,7 +133,8 @@ export function buildBSPTree(primitives: Primitive2D[]): BSPNode {
         break;
       }
       case "Line": {
-        switch (classifyPoints(primitive.points, plane)) {
+        const { side, distances } = classifyPoints(primitive.points, plane);
+        switch (side) {
           case "front":
             front.push(primitive);
             break;
@@ -138,7 +145,7 @@ export function buildBSPTree(primitives: Primitive2D[]): BSPNode {
             coplanar.push(primitive);
             break;
           case "straddling": {
-            const split = splitLineByPlane(primitive, plane);
+            const split = splitLineByPlane(primitive, distances);
             front.push(...split.front);
             back.push(...split.back);
             break;
@@ -147,7 +154,8 @@ export function buildBSPTree(primitives: Primitive2D[]): BSPNode {
         break;
       }
       case "Polygon": {
-        switch (classifyPoints(primitive.points, plane)) {
+        const { side, distances } = classifyPoints(primitive.points, plane);
+        switch (side) {
           case "front":
             front.push(primitive);
             break;
@@ -158,7 +166,7 @@ export function buildBSPTree(primitives: Primitive2D[]): BSPNode {
             coplanar.push(primitive);
             break;
           case "straddling": {
-            const split = splitPolygonByPlane(primitive, plane);
+            const split = splitPolygonByPlane(primitive, distances, plane);
             front.push(...split.front);
             back.push(...split.back);
             break;

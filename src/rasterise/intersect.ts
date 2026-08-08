@@ -1,4 +1,4 @@
-import { Vector } from "vectyped";
+import type { Vector } from "vectyped";
 
 import { IMPRECISION_THRESHOLD, pointsToPlane } from "./helpers";
 import { project, type ProjectOptions } from "./project";
@@ -10,53 +10,22 @@ import {
   type Primitive2D,
 } from "./types";
 
-function intersectPolygons(
-  a: Polygon,
-  b: Polygon
-): [number[], number[]] | null {
-  const aPlane = pointsToPlane(a.points);
-  const bPlane = pointsToPlane(b.points);
-  let aMinMax = { min: Infinity, max: -Infinity };
-  let bMinMax = { min: Infinity, max: -Infinity };
-
-  const aSignedDistances = a.points.map(point => {
-    const dist = bPlane.norm.dot(point) + bPlane.d;
-    aMinMax = {
-      min: Math.min(aMinMax.min, dist),
-      max: Math.max(aMinMax.max, dist),
-    };
-    return dist;
-  });
-  const bSignedDistances = b.points.map(point => {
-    const dist = aPlane.norm.dot(point) + aPlane.d;
-    bMinMax = {
-      min: Math.min(bMinMax.min, dist),
-      max: Math.max(bMinMax.max, dist),
-    };
-    return dist;
-  });
-
-  return aMinMax.min < -IMPRECISION_THRESHOLD &&
-    aMinMax.max > IMPRECISION_THRESHOLD &&
-    bMinMax.min < -IMPRECISION_THRESHOLD &&
-    bMinMax.max > IMPRECISION_THRESHOLD
-    ? [aSignedDistances, bSignedDistances]
-    : null;
-}
-
-function bounds2D(points: Vector<2>[]): { min: Vector<2>; max: Vector<2> } {
-  return points.reduce(
+function boundsOf<N extends number>(
+  points: Vector<N>[]
+): { min: Vector<N>; max: Vector<N> } {
+  const first = points.at(0) as Vector<N>;
+  return points.slice(1).reduce(
     (acc, point) => ({
       min: acc.min.min(point),
       max: acc.max.max(point),
     }),
-    { min: Vector.fill(2, Infinity), max: Vector.fill(2, -Infinity) }
+    { min: first.copy(), max: first.copy() }
   );
 }
 
-function bounds2DOverlap(
-  a: { min: Vector<2>; max: Vector<2> },
-  b: { min: Vector<2>; max: Vector<2> }
+function boundsOverlap<N extends number>(
+  a: { min: Vector<N>; max: Vector<N> },
+  b: { min: Vector<N>; max: Vector<N> }
 ): boolean {
   const aSize = a.max.copy().sub(a.min);
   return a.min.inBounds(
@@ -105,7 +74,7 @@ function findLineLineCrossing(
 ): LineCrossing | null {
   const aProjected = a.points.map(point => project(point, projectOptions));
   const bProjected = b.points.map(point => project(point, projectOptions));
-  if (!bounds2DOverlap(bounds2D(aProjected), bounds2D(bProjected))) {
+  if (!boundsOverlap(boundsOf(aProjected), boundsOf(bProjected))) {
     return null;
   }
 
@@ -178,9 +147,13 @@ interface LinePolygonCrossing {
 
 function findLinePolygonCrossing(
   line: Line,
-  polygon: Polygon
+  polygon: Polygon,
+  plane: { norm: Vector<3>; d: number }
 ): LinePolygonCrossing | null {
-  const plane = pointsToPlane(polygon.points);
+  if (!boundsOverlap(boundsOf(line.points), boundsOf(polygon.points))) {
+    return null;
+  }
+
   const dists = line.points.map(point => plane.norm.dot(point) + plane.d);
 
   for (let i = 0; i < line.points.length - 1; i++) {
@@ -235,33 +208,33 @@ export function resolveIntersections(
   primitives: Primitive2D[],
   projectOptions: ProjectOptions
 ): Primitive2D[] {
+  // A polygon's plane is checked against every line in the scene, so cache
+  // it per polygon rather than recomputing it on each pair.
+  const polygonPlanes = new Map<Polygon, { norm: Vector<3>; d: number }>();
+  const planeFor = (polygon: Polygon): { norm: Vector<3>; d: number } => {
+    let plane = polygonPlanes.get(polygon);
+    if (plane == null) {
+      plane = pointsToPlane(polygon.points);
+      polygonPlanes.set(polygon, plane);
+    }
+    return plane;
+  };
+
   for (let i = 0; i < primitives.length; i++) {
     for (let j = i + 1; j < primitives.length; j++) {
       const currPrimitive = primitives.at(i) as Primitive2D;
       const otherPrimitive = primitives.at(j) as Primitive2D;
 
-      if (currPrimitive.type === "Point" || otherPrimitive.type === "Point") {
+      if (
+        (currPrimitive.type === "Polygon" &&
+          otherPrimitive.type === "Polygon") ||
+        currPrimitive.type === "Point" ||
+        otherPrimitive.type === "Point"
+      ) {
         continue;
       }
 
-      if (
-        currPrimitive.type === "Polygon" &&
-        otherPrimitive.type === "Polygon"
-      ) {
-        const results = intersectPolygons(currPrimitive, otherPrimitive);
-        if (results != null) {
-          const currCut = cutPolygonSignedDistances(currPrimitive, results[0]);
-          const otherCut = cutPolygonSignedDistances(
-            otherPrimitive,
-            results[1]
-          );
-          primitives.splice(i, 1, ...currCut);
-          primitives.splice(j + (currCut.length - 1), 1, ...otherCut);
-        }
-      } else if (
-        currPrimitive.type === "Line" &&
-        otherPrimitive.type === "Line"
-      ) {
+      if (currPrimitive.type === "Line" && otherPrimitive.type === "Line") {
         const crossing = findLineLineCrossing(
           currPrimitive,
           otherPrimitive,
@@ -288,7 +261,11 @@ export function resolveIntersections(
         const polygon = (
           currPrimitive.type === "Polygon" ? currPrimitive : otherPrimitive
         ) as Polygon;
-        const crossing = findLinePolygonCrossing(line, polygon);
+        const crossing = findLinePolygonCrossing(
+          line,
+          polygon,
+          planeFor(polygon)
+        );
 
         if (crossing != null) {
           const lineCut = cutLineAt(line, crossing.index, crossing.t);
@@ -303,30 +280,4 @@ export function resolveIntersections(
     }
   }
   return primitives;
-}
-
-export function linePlaneIntersection(
-  line: { norm: Vector<3>; intersect: Vector<3> },
-  plane: { norm: Vector<3>; d: number }
-): Vector<3> {
-  return line.norm
-    .copy()
-    .multiply((plane.d - line.intersect.sum()) / plane.norm.dot(line.norm))
-    .add(line.intersect);
-}
-
-export function planePlaneIntersection(
-  a: { norm: Vector<3>; d: number },
-  b: { norm: Vector<3>; d: number }
-): { norm: Vector<3>; intersect: Vector<3> } {
-  const yNumerator = a.norm.x() * b.d - b.norm.x() * a.d;
-  const yDenominator = a.norm.x() * b.norm.y() - b.norm.x() * a.norm.y();
-  const y = yNumerator / yDenominator;
-  const x =
-    (a.d * yDenominator - a.norm.y() * yNumerator) /
-    (a.norm.x() * yDenominator);
-  return {
-    norm: a.norm.crossProduct(b.norm),
-    intersect: Vector.create(x, y, 0),
-  };
 }
