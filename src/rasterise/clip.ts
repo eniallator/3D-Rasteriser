@@ -6,22 +6,17 @@ import type { ProjectOptions } from "./project";
 import {
   createLine,
   type Line,
+  type Plane,
   type Polygon,
   type Primitive2D,
   type ProjectedPrimitive,
 } from "./types";
 
-function cameraPlane({ viewPos, dirNorm }: ProjectOptions): {
-  norm: Vector<3>;
-  d: number;
-} {
+function cameraPlane({ viewPos, dirNorm }: ProjectOptions): Plane {
   return { norm: dirNorm, d: -dirNorm.dot(viewPos) };
 }
 
-function signedDistance(
-  point: Vector<3>,
-  plane: { norm: Vector<3>; d: number }
-): number {
+function signedDistance(point: Vector<3>, plane: Plane): number {
   return plane.norm.dot(point) + plane.d;
 }
 
@@ -30,10 +25,7 @@ interface PointDist {
   dist: number;
 }
 
-function clipLineToPlane(
-  line: Line,
-  plane: { norm: Vector<3>; d: number }
-): Line[] {
+function clipLineToPlane(line: Line, plane: Plane): Line[] {
   const points = line.points.map((point): PointDist => ({
     point,
     dist: signedDistance(point, plane),
@@ -66,10 +58,7 @@ function clipLineToPlane(
   return lines;
 }
 
-function clipPolygonToPlane(
-  polygon: Polygon,
-  plane: { norm: Vector<3>; d: number }
-): Polygon[] {
+function clipPolygonToPlane(polygon: Polygon, plane: Plane): Polygon[] {
   const signedDistances = polygon.points.map(point =>
     signedDistance(point, plane)
   );

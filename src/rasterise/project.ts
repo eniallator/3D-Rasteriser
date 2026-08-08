@@ -11,16 +11,28 @@ export interface ProjectOptions {
   screenDim: Vector<2>;
 }
 
+export interface CameraBasis {
+  screenCenterPos: Vector<3>;
+  xAxis: Vector<3>;
+  yAxis: Vector<3>;
+}
+
+export function cameraBasis({ dirNorm, fov }: ProjectOptions): CameraBasis {
+  const screenCenterPos = dirNorm.copy().setMagnitude(1 / fov);
+  const xAxis = dirNorm.crossProduct(Vector.create(0, 1, 0)).normalise();
+  const yAxis = dirNorm.crossProduct(xAxis);
+  return { screenCenterPos, xAxis, yAxis };
+}
+
 export function project(
   point: Vector<3>,
-  { viewPos, dirNorm, fov, screenDim }: ProjectOptions
+  projectOptions: ProjectOptions
 ): Vector<2> {
-  const screenCenterPos = dirNorm.copy().setMagnitude(1 / fov);
+  const { viewPos, dirNorm, screenDim } = projectOptions;
+  const { screenCenterPos, xAxis, yAxis } = cameraBasis(projectOptions);
   const pointNorm = point.copy().sub(viewPos).getNorm();
   const t = screenCenterPos.dot(dirNorm) / pointNorm.dot(dirNorm);
   const pointOnPlane = pointNorm.multiply(t);
-  const xAxis = dirNorm.crossProduct(Vector.create(0, 1, 0)).normalise();
-  const yAxis = dirNorm.crossProduct(xAxis);
 
   const screenStart = {
     x: screenCenterPos.copy().sub(xAxis.copy().divide(2)),

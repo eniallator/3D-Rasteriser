@@ -9,6 +9,10 @@ export type StrokeStyle<A> = OptRunnable<
 
 export type FillStyle<A> = OptRunnable<A, CanvasFillStrokeStyles["fillStyle"]>;
 
+export type Plane = { norm: Vector<3>; d: number };
+
+export type AABB<N extends number> = { min: Vector<N>; max: Vector<N> };
+
 export interface ProjectedPoint {
   type: "Point";
   primitive: Point;
@@ -62,6 +66,22 @@ export interface Polygon {
 
 export type Primitive1D = Point | Line;
 export type Primitive2D = Primitive1D | Polygon;
+
+export type PrimitiveBTree<BranchMeta, LeafMeta = Record<never, never>> =
+  | ({
+      type: "branch";
+      left: PrimitiveBTree<BranchMeta, LeafMeta>;
+      right: PrimitiveBTree<BranchMeta, LeafMeta>;
+    } & BranchMeta)
+  | ({ type: "leaf"; primitives: Primitive2D[] } & LeafMeta);
+
+export type BSPNode = PrimitiveBTree<{ plane: Plane; coplanar: Primitive2D[] }>;
+export type BVHNode = PrimitiveBTree<{ bounds: AABB<3> }, { bounds: AABB<3> }>;
+
+export interface PreparedScene {
+  tree: BSPNode;
+  bvh: BVHNode;
+}
 
 export function createPoint(point: Omit<Point, "type">): Point {
   return { type: "Point", ...point };

@@ -3,19 +3,14 @@ import { Vector } from "vectyped";
 
 import { IMPRECISION_THRESHOLD, planeSide, pointsToPlane } from "./helpers";
 import { cutPolygonSignedDistances } from "./intersect";
-import { createLine, type Line, type Polygon, type Primitive2D } from "./types";
-
-type Plane = { norm: Vector<3>; d: number };
-
-export type BSPNode =
-  | { type: "leaf"; primitives: Primitive2D[] }
-  | {
-      type: "split";
-      plane: Plane;
-      coplanar: Primitive2D[];
-      front: BSPNode;
-      back: BSPNode;
-    };
+import {
+  createLine,
+  type BSPNode,
+  type Line,
+  type Plane,
+  type Polygon,
+  type Primitive2D,
+} from "./types";
 
 type Side = "front" | "back" | "coplanar" | "straddling";
 
@@ -266,11 +261,11 @@ export function buildBSPTree(primitives: Primitive2D[]): BSPNode {
   }
 
   return {
-    type: "split",
+    type: "branch",
     plane,
     coplanar,
-    front: buildBSPTree(front),
-    back: buildBSPTree(back),
+    left: buildBSPTree(front),
+    right: buildBSPTree(back),
   };
 }
 
@@ -283,13 +278,13 @@ export function traverseBackToFront(
   const eyeSide = planeSide(viewPos, node.plane);
   return eyeSide < 0
     ? [
-        ...traverseBackToFront(node.front, viewPos),
+        ...traverseBackToFront(node.left, viewPos),
         ...node.coplanar,
-        ...traverseBackToFront(node.back, viewPos),
+        ...traverseBackToFront(node.right, viewPos),
       ]
     : [
-        ...traverseBackToFront(node.back, viewPos),
+        ...traverseBackToFront(node.right, viewPos),
         ...node.coplanar,
-        ...traverseBackToFront(node.front, viewPos),
+        ...traverseBackToFront(node.left, viewPos),
       ];
 }

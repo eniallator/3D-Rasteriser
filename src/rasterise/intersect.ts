@@ -1,38 +1,20 @@
-import type { Vector } from "vectyped";
+import { Vector } from "vectyped";
 
-import { IMPRECISION_THRESHOLD, pointsToPlane } from "./helpers";
-import { project, type ProjectOptions } from "./project";
+import { buildBVH, primitiveBounds, queryOverlapping } from "./bvh";
+import {
+  boundsOf,
+  boundsOverlap,
+  IMPRECISION_THRESHOLD,
+  pointsToPlane,
+} from "./helpers";
 import {
   createLine,
   createPolygon,
   type Line,
+  type Plane,
   type Polygon,
   type Primitive2D,
 } from "./types";
-
-function boundsOf<N extends number>(
-  points: Vector<N>[]
-): { min: Vector<N>; max: Vector<N> } {
-  const first = points.at(0) as Vector<N>;
-  return points.slice(1).reduce(
-    (acc, point) => ({
-      min: acc.min.min(point),
-      max: acc.max.max(point),
-    }),
-    { min: first.copy(), max: first.copy() }
-  );
-}
-
-function boundsOverlap<N extends number>(
-  a: { min: Vector<N>; max: Vector<N> },
-  b: { min: Vector<N>; max: Vector<N> }
-): boolean {
-  const aSize = a.max.copy().sub(a.min);
-  return a.min.inBounds(
-    b.max.copy().sub(b.min).add(aSize),
-    b.min.copy().sub(aSize)
-  );
-}
 
 function segment2DIntersection(
   a0: Vector<2>,
@@ -40,17 +22,14 @@ function segment2DIntersection(
   b0: Vector<2>,
   b1: Vector<2>
 ): { t: number; s: number } | null {
-  const d1x = a1.x() - a0.x();
-  const d1y = a1.y() - a0.y();
-  const d2x = b1.x() - b0.x();
-  const d2y = b1.y() - b0.y();
-  const denom = d1x * d2y - d1y * d2x;
+  const d1 = a1.copy().sub(a0);
+  const d2 = b1.copy().sub(b0);
+  const denom = d1.x() * d2.y() - d1.y() * d2.x();
   if (Math.abs(denom) < IMPRECISION_THRESHOLD) return null;
 
-  const dx = b0.x() - a0.x();
-  const dy = b0.y() - a0.y();
-  const t = (dx * d2y - dy * d2x) / denom;
-  const s = (dx * d1y - dy * d1x) / denom;
+  const d = b0.copy().sub(a0);
+  const t = (d.x() * d2.y() - d.y() * d2.x()) / denom;
+  const s = (d.x() * d1.y() - d.y() * d1.x()) / denom;
 
   return t > IMPRECISION_THRESHOLD &&
     t < 1 - IMPRECISION_THRESHOLD &&
@@ -67,24 +46,41 @@ interface LineCrossing {
   bT: number;
 }
 
-function findLineLineCrossing(
-  a: Line,
-  b: Line,
-  projectOptions: ProjectOptions
-): LineCrossing | null {
-  const aProjected = a.points.map(point => project(point, projectOptions));
-  const bProjected = b.points.map(point => project(point, projectOptions));
-  if (!boundsOverlap(boundsOf(aProjected), boundsOf(bProjected))) {
+function findLineLineCrossing(a: Line, b: Line): LineCrossing | null {
+  if (!boundsOverlap(boundsOf(a.points), boundsOf(b.points))) {
     return null;
   }
 
-  for (let aIndex = 0; aIndex < aProjected.length - 1; aIndex++) {
-    for (let bIndex = 0; bIndex < bProjected.length - 1; bIndex++) {
+  for (let aIndex = 0; aIndex < a.points.length - 1; aIndex++) {
+    const a0 = a.points[aIndex] as Vector<3>;
+    const a1 = a.points[aIndex + 1] as Vector<3>;
+    const aDir = a1.copy().sub(a0);
+    if (aDir.getSquaredMagnitude() < IMPRECISION_THRESHOLD) continue;
+    const u = aDir.normalise();
+
+    for (let bIndex = 0; bIndex < b.points.length - 1; bIndex++) {
+      const b0 = b.points[bIndex] as Vector<3>;
+      const b1 = b.points[bIndex + 1] as Vector<3>;
+
+      const normal = u.copy().crossProduct(b0.copy().sub(a0));
+      if (normal.getSquaredMagnitude() < IMPRECISION_THRESHOLD) continue;
+      normal.normalise();
+
+      if (Math.abs(normal.dot(b1.copy().sub(a0))) > IMPRECISION_THRESHOLD) {
+        continue;
+      }
+
+      const v = normal.crossProduct(u);
+      const toUV = (p: Vector<3>): Vector<2> => {
+        const rel = p.copy().sub(a0);
+        return Vector.create(rel.dot(u), rel.dot(v));
+      };
+
       const crossing = segment2DIntersection(
-        aProjected[aIndex] as Vector<2>,
-        aProjected[aIndex + 1] as Vector<2>,
-        bProjected[bIndex] as Vector<2>,
-        bProjected[bIndex + 1] as Vector<2>
+        toUV(a0),
+        toUV(a1),
+        toUV(b0),
+        toUV(b1)
       );
       if (crossing != null) {
         return { aIndex, aT: crossing.t, bIndex, bT: crossing.s };
@@ -94,8 +90,6 @@ function findLineLineCrossing(
   return null;
 }
 
-// Splits a line into two pieces at parameter t (0-1) along the segment
-// starting at `index`.
 function cutLineAt(line: Line, index: number, t: number): [Line, Line] {
   const point = line.points[index] as Vector<3>;
   const next = line.points[index + 1] as Vector<3>;
@@ -115,7 +109,7 @@ function cutLineAt(line: Line, index: number, t: number): [Line, Line] {
 function isPointInPolygon(
   point: Vector<3>,
   polygon: Polygon,
-  plane: { norm: Vector<3>; d: number }
+  plane: Plane
 ): boolean {
   const origin = polygon.points[0];
   const u = polygon.points[1].copy().sub(origin).normalise();
@@ -148,7 +142,7 @@ interface LinePolygonCrossing {
 function findLinePolygonCrossing(
   line: Line,
   polygon: Polygon,
-  plane: { norm: Vector<3>; d: number }
+  plane: Plane
 ): LinePolygonCrossing | null {
   if (!boundsOverlap(boundsOf(line.points), boundsOf(polygon.points))) {
     return null;
@@ -204,14 +198,9 @@ export function cutPolygonSignedDistances(
   return polygons;
 }
 
-export function resolveIntersections(
-  primitives: Primitive2D[],
-  projectOptions: ProjectOptions
-): Primitive2D[] {
-  // A polygon's plane is checked against every line in the scene, so cache
-  // it per polygon rather than recomputing it on each pair.
-  const polygonPlanes = new Map<Polygon, { norm: Vector<3>; d: number }>();
-  const planeFor = (polygon: Polygon): { norm: Vector<3>; d: number } => {
+export function resolveIntersections(primitives: Primitive2D[]): Primitive2D[] {
+  const polygonPlanes = new Map<Polygon, Plane>();
+  const planeFor = (polygon: Polygon): Plane => {
     let plane = polygonPlanes.get(polygon);
     if (plane == null) {
       plane = pointsToPlane(polygon.points);
@@ -220,64 +209,84 @@ export function resolveIntersections(
     return plane;
   };
 
-  for (let i = 0; i < primitives.length; i++) {
-    for (let j = i + 1; j < primitives.length; j++) {
-      const currPrimitive = primitives.at(i) as Primitive2D;
-      const otherPrimitive = primitives.at(j) as Primitive2D;
+  const points = primitives.filter(p => p.type === "Point");
+  const initial = primitives.filter(p => p.type !== "Point");
+  const bvh = buildBVH(initial);
 
-      if (
-        (currPrimitive.type === "Polygon" &&
-          otherPrimitive.type === "Polygon") ||
-        currPrimitive.type === "Point" ||
-        otherPrimitive.type === "Point"
-      ) {
-        continue;
-      }
+  const removed = new Set<Line | Polygon>();
+  const replacedBy = new Map<Line | Polygon, (Line | Polygon)[]>();
+  const resolveCurrent = (primitive: Line | Polygon): (Line | Polygon)[] => {
+    const replacement = replacedBy.get(primitive);
+    return replacement == null
+      ? [primitive]
+      : replacement.flatMap(resolveCurrent);
+  };
 
-      if (currPrimitive.type === "Line" && otherPrimitive.type === "Line") {
-        const crossing = findLineLineCrossing(
-          currPrimitive,
-          otherPrimitive,
-          projectOptions
-        );
-        if (crossing != null) {
-          const currCut = cutLineAt(
-            currPrimitive,
-            crossing.aIndex,
-            crossing.aT
-          );
-          const otherCut = cutLineAt(
-            otherPrimitive,
-            crossing.bIndex,
-            crossing.bT
-          );
-          primitives.splice(i, 1, ...currCut);
-          primitives.splice(j + (currCut.length - 1), 1, ...otherCut);
+  const working: (Line | Polygon)[] = [...initial];
+
+  for (let i = 0; i < working.length; i++) {
+    const currPrimitive = working.at(i) as Line | Polygon;
+    if (removed.has(currPrimitive)) continue;
+
+    const candidates = queryOverlapping(bvh, primitiveBounds(currPrimitive));
+
+    for (const rawCandidate of candidates) {
+      if (removed.has(currPrimitive)) break;
+      if (rawCandidate.type === "Point") continue;
+
+      for (const otherPrimitive of resolveCurrent(rawCandidate)) {
+        if (removed.has(currPrimitive)) break;
+        if (otherPrimitive === currPrimitive) continue;
+
+        if (
+          currPrimitive.type === "Polygon" &&
+          otherPrimitive.type === "Polygon"
+        ) {
+          continue;
         }
-      } else {
-        const line = (
-          currPrimitive.type === "Line" ? currPrimitive : otherPrimitive
-        ) as Line;
-        const polygon = (
-          currPrimitive.type === "Polygon" ? currPrimitive : otherPrimitive
-        ) as Polygon;
-        const crossing = findLinePolygonCrossing(
-          line,
-          polygon,
-          planeFor(polygon)
-        );
 
-        if (crossing != null) {
-          const lineCut = cutLineAt(line, crossing.index, crossing.t);
-          const currCut =
-            currPrimitive.type === "Line" ? lineCut : [currPrimitive];
-          const otherCut =
-            otherPrimitive.type === "Line" ? lineCut : [otherPrimitive];
-          primitives.splice(i, 1, ...currCut);
-          primitives.splice(j + (currCut.length - 1), 1, ...otherCut);
+        if (currPrimitive.type === "Line" && otherPrimitive.type === "Line") {
+          const crossing = findLineLineCrossing(currPrimitive, otherPrimitive);
+          if (crossing != null) {
+            const currCut = cutLineAt(
+              currPrimitive,
+              crossing.aIndex,
+              crossing.aT
+            );
+            const otherCut = cutLineAt(
+              otherPrimitive,
+              crossing.bIndex,
+              crossing.bT
+            );
+            removed.add(currPrimitive);
+            removed.add(otherPrimitive);
+            replacedBy.set(currPrimitive, currCut);
+            replacedBy.set(otherPrimitive, otherCut);
+            working.push(...currCut, ...otherCut);
+          }
+        } else {
+          const currIsLine = currPrimitive.type === "Line";
+          const line = (currIsLine ? currPrimitive : otherPrimitive) as Line;
+          const polygon = (
+            currIsLine ? otherPrimitive : currPrimitive
+          ) as Polygon;
+          const crossing = findLinePolygonCrossing(
+            line,
+            polygon,
+            planeFor(polygon)
+          );
+
+          if (crossing != null) {
+            const lineCut = cutLineAt(line, crossing.index, crossing.t);
+            removed.add(line);
+            replacedBy.set(line, lineCut);
+            working.push(...lineCut);
+          }
         }
       }
     }
   }
-  return primitives;
+
+  const final = working.filter(primitive => !removed.has(primitive));
+  return [...points, ...final];
 }
