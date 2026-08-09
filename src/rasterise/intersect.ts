@@ -182,10 +182,12 @@ export function cutPolygonSignedDistances(
     const sDist = signedDistances[i] as number;
     const nextSDist = signedDistances[nextI] as number;
     if (sDist >= 0 !== nextSDist >= 0) {
-      const pointOnPlane = point.lerp(
-        sDist / (sDist - nextSDist),
-        polygon.points[nextI] as Vector<3>
-      );
+      const pointOnPlane = point
+        .copy()
+        .lerp(
+          sDist / (sDist - nextSDist),
+          polygon.points[nextI] as Vector<3>
+        );
       currentPoints.push(pointOnPlane);
       polygons.push(
         createPolygon({ points: currentPoints as Polygon["points"] })
