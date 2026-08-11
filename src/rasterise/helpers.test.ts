@@ -20,21 +20,21 @@ function fakeCtx(): CanvasRenderingContext2D {
 describe("optSetStroke", () => {
   it("sets strokeStyle directly when given a plain value", () => {
     const ctx = fakeCtx();
-    optSetStroke(ctx, "red", undefined);
+    optSetStroke(ctx, "red", []);
     expect(ctx.strokeStyle).toBe("red");
   });
 
   it("calls the style function with args and sets the result", () => {
     const ctx = fakeCtx();
-    const style = vi.fn(() => "blue");
-    optSetStroke(ctx, style, "the-args");
-    expect(style).toHaveBeenCalledWith("the-args");
+    const style = vi.fn((..._args: [string, string]) => "blue");
+    optSetStroke(ctx, style, ["the", "args"]);
+    expect(style).toHaveBeenCalledWith("the", "args");
     expect(ctx.strokeStyle).toBe("blue");
   });
 
   it("does nothing when style is undefined", () => {
     const ctx = fakeCtx();
-    optSetStroke(ctx, undefined, undefined);
+    optSetStroke(ctx, undefined, []);
     expect(ctx.strokeStyle).toBeUndefined();
   });
 });
@@ -42,21 +42,21 @@ describe("optSetStroke", () => {
 describe("optSetFill", () => {
   it("sets fillStyle directly when given a plain value", () => {
     const ctx = fakeCtx();
-    optSetFill(ctx, "green", undefined);
+    optSetFill(ctx, "green", []);
     expect(ctx.fillStyle).toBe("green");
   });
 
   it("calls the style function with args and sets the result", () => {
     const ctx = fakeCtx();
-    const style = vi.fn(() => "yellow");
-    optSetFill(ctx, style, "the-args");
+    const style = vi.fn((..._args: [string]) => "yellow");
+    optSetFill(ctx, style, ["the-args"]);
     expect(style).toHaveBeenCalledWith("the-args");
     expect(ctx.fillStyle).toBe("yellow");
   });
 
   it("does nothing when style is undefined", () => {
     const ctx = fakeCtx();
-    optSetFill(ctx, undefined, undefined);
+    optSetFill(ctx, undefined, []);
     expect(ctx.fillStyle).toBeUndefined();
   });
 });

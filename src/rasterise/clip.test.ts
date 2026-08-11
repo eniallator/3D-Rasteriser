@@ -120,7 +120,7 @@ describe("isPrimitiveOnScreen", () => {
       primitive: createPoint({ point: Vector.create(0, 0, 0) }),
       projected: Vector.create(400, 300),
     };
-    expect(isPrimitiveOnScreen(projected, projectOptions)).toBe(true);
+    expect(isPrimitiveOnScreen(projected, projectOptions.screenDim)).toBe(true);
   });
 
   it("returns false for a Point outside screen bounds", () => {
@@ -129,7 +129,9 @@ describe("isPrimitiveOnScreen", () => {
       primitive: createPoint({ point: Vector.create(0, 0, 0) }),
       projected: Vector.create(-50, 300),
     };
-    expect(isPrimitiveOnScreen(projected, projectOptions)).toBe(false);
+    expect(isPrimitiveOnScreen(projected, projectOptions.screenDim)).toBe(
+      false
+    );
   });
 
   it("returns true for a Line whose endpoints are off-screen but which crosses the screen", () => {
@@ -141,7 +143,7 @@ describe("isPrimitiveOnScreen", () => {
       primitive: line,
       projected: [Vector.create(-10, 300), Vector.create(810, 300)],
     };
-    expect(isPrimitiveOnScreen(projected, projectOptions)).toBe(true);
+    expect(isPrimitiveOnScreen(projected, projectOptions.screenDim)).toBe(true);
   });
 
   it("returns false for a Line entirely off-screen and not crossing it", () => {
@@ -153,7 +155,9 @@ describe("isPrimitiveOnScreen", () => {
       primitive: line,
       projected: [Vector.create(-100, -100), Vector.create(-50, -50)],
     };
-    expect(isPrimitiveOnScreen(projected, projectOptions)).toBe(false);
+    expect(isPrimitiveOnScreen(projected, projectOptions.screenDim)).toBe(
+      false
+    );
   });
 
   it("returns true for a Polygon whose vertices are off-screen but whose edge crosses the screen", () => {
@@ -173,7 +177,7 @@ describe("isPrimitiveOnScreen", () => {
         Vector.create(400, -500),
       ],
     };
-    expect(isPrimitiveOnScreen(projected, projectOptions)).toBe(true);
+    expect(isPrimitiveOnScreen(projected, projectOptions.screenDim)).toBe(true);
   });
 
   it("returns false for a Polygon entirely off-screen", () => {
@@ -193,6 +197,8 @@ describe("isPrimitiveOnScreen", () => {
         Vector.create(-250, -200),
       ],
     };
-    expect(isPrimitiveOnScreen(projected, projectOptions)).toBe(false);
+    expect(isPrimitiveOnScreen(projected, projectOptions.screenDim)).toBe(
+      false
+    );
   });
 });

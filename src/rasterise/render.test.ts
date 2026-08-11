@@ -61,7 +61,7 @@ describe("renderPrimitive - Point", () => {
     renderPrimitive(ctx, projected);
 
     expect(arc).toHaveBeenCalledWith(10, 20, 7, 0, 2 * Math.PI);
-    expect(style).toHaveBeenCalledWith(projected);
+    expect(style).toHaveBeenCalledWith(projected, ctx);
     expect(ctx.fillStyle).toBe("purple");
   });
 
@@ -174,7 +174,7 @@ describe("renderPrimitive - Polygon", () => {
 
     renderPrimitive(ctx, projected);
 
-    expect(style).toHaveBeenCalledWith(projected);
+    expect(style).toHaveBeenCalledWith(projected, ctx);
     expect(ctx.fillStyle).toBe("orange");
   });
 });
