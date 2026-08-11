@@ -1,17 +1,26 @@
 import type { Vector } from "vectyped";
 
-type OptRunnable<A, R> = R | ((args: A) => R);
+type OptRunnable<A extends readonly unknown[], R> = R | ((...args: A) => R);
 
-export type StrokeStyle<A> = OptRunnable<
+export type StrokeStyle<A extends readonly unknown[]> = OptRunnable<
   A,
   CanvasFillStrokeStyles["strokeStyle"]
 >;
 
-export type FillStyle<A> = OptRunnable<A, CanvasFillStrokeStyles["fillStyle"]>;
+export type FillStyle<A extends readonly unknown[]> = OptRunnable<
+  A,
+  CanvasFillStrokeStyles["fillStyle"]
+>;
 
 export type Plane = { norm: Vector<3>; d: number };
 
 export type AABB<N extends number> = { min: Vector<N>; max: Vector<N> };
+
+export interface CameraOptions {
+  viewPos: Vector<3>;
+  dirNorm: Vector<3>;
+  fov: number;
+}
 
 export interface ProjectedPoint {
   type: "Point";
@@ -22,13 +31,13 @@ export interface ProjectedPoint {
 export interface ProjectedLine {
   type: "Line";
   primitive: Line;
-  projected: Array<Vector<2>>;
+  projected: Vector<2>[];
 }
 
 export interface ProjectedPolygon {
   type: "Polygon";
   primitive: Polygon;
-  projected: Array<Vector<2>>;
+  projected: Vector<2>[];
 }
 
 export type ProjectedPrimitive =
@@ -42,26 +51,26 @@ export interface Point {
   type: "Point";
   point: Vector<3>;
   radius?: number;
-  style?: FillStyle<ProjectedPoint>;
+  style?: FillStyle<[ProjectedPoint, CanvasRenderingContext2D]>;
   label?: {
     text: string;
     maxWidth?: number;
-    style?: FillStyle<ProjectedPoint>;
-    font?: OptRunnable<ProjectedPoint, string>;
+    style?: FillStyle<[ProjectedPoint, CanvasRenderingContext2D]>;
+    font?: OptRunnable<[ProjectedPoint, CanvasRenderingContext2D], string>;
   };
 }
 
 export interface Line {
   type: "Line";
-  points: Array<Vector<3>>;
+  points: Vector<3>[];
   width?: number;
-  style?: StrokeStyle<ProjectedLine>;
+  style?: StrokeStyle<[ProjectedLine, CanvasRenderingContext2D]>;
 }
 
 export interface Polygon {
   type: "Polygon";
   points: [Vector<3>, Vector<3>, Vector<3>, ...Vector<3>[]];
-  style?: FillStyle<ProjectedPolygon>;
+  style?: FillStyle<[ProjectedPolygon, CanvasRenderingContext2D]>;
 }
 
 export type Primitive1D = Point | Line;

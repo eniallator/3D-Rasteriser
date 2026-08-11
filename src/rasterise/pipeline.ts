@@ -26,7 +26,7 @@ export function naivePipeline(
     clipPrimitivesToCamera(primitives, projectOptions) as Primitive1D[],
     (primitive: Primitive1D) => {
       const projected = projectPrimitive(primitive, projectOptions);
-      return isPrimitiveOnScreen(projected, projectOptions)
+      return isPrimitiveOnScreen(projected, projectOptions.screenDim)
         ? tuple(findSqrDist(projectOptions.viewPos, primitive).avg, projected)
         : null;
     }
@@ -41,7 +41,9 @@ export function naivePipeline(
     });
 }
 
-export function prepareScene(primitives: Primitive2D[]): PreparedScene {
+export function prepareScene(
+  primitives: readonly Primitive2D[]
+): PreparedScene {
   const resolved = resolveIntersections(primitives);
   return { tree: buildBSPTree(resolved), bvh: buildBVH(resolved) };
 }
@@ -62,7 +64,9 @@ export function renderPrepared(
     projectOptions
   )
     .map(primitive => projectPrimitive(primitive, projectOptions))
-    .filter(projected => isPrimitiveOnScreen(projected, projectOptions))
+    .filter(projected =>
+      isPrimitiveOnScreen(projected, projectOptions.screenDim)
+    )
     .forEach(projected => {
       ctx.fillStyle = defaultFill ?? "white";
       ctx.strokeStyle = defaultStroke ?? "white";

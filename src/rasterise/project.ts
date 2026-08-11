@@ -2,12 +2,9 @@ import { checkExhausted } from "niall-utils";
 import { Vector } from "vectyped";
 
 import { intersect } from "./helpers";
-import type { Primitive2D, ToProjected } from "./types";
+import type { CameraOptions, Primitive2D, ToProjected } from "./types";
 
-export interface ProjectOptions {
-  viewPos: Vector<3>;
-  dirNorm: Vector<3>;
-  fov: number;
+export interface ProjectOptions extends CameraOptions {
   screenDim: Vector<2>;
 }
 

@@ -12,10 +12,6 @@ import {
   type ProjectedPrimitive,
 } from "./types";
 
-function cameraPlane({ viewPos, dirNorm }: ProjectOptions): Plane {
-  return { norm: dirNorm, d: -dirNorm.dot(viewPos) };
-}
-
 function signedDistance(point: Vector<3>, plane: Plane): number {
   return plane.norm.dot(point) + plane.d;
 }
@@ -77,7 +73,8 @@ export function clipPrimitivesToCamera(
   primitives: Primitive2D[],
   projectOptions: ProjectOptions
 ): Primitive2D[] {
-  const plane = cameraPlane(projectOptions);
+  const { dirNorm, viewPos } = projectOptions;
+  const plane = { norm: dirNorm, d: -dirNorm.dot(viewPos) };
   return primitives.flatMap((primitive): Primitive2D[] => {
     switch (primitive.type) {
       case "Point":
@@ -131,23 +128,22 @@ function segmentOverlapsScreen(
 
 export function isPrimitiveOnScreen(
   projected: ProjectedPrimitive,
-  projectOptions: ProjectOptions
+  screenDim: Vector<2>
 ): boolean {
   if (projected.type === "Point") {
-    return projected.projected.inBounds(projectOptions.screenDim);
+    return projected.projected.inBounds(screenDim);
   }
 
   const points = projected.projected;
-  if (points.some(point => point.inBounds(projectOptions.screenDim))) {
+  if (points.some(point => point.inBounds(screenDim))) {
     return true;
   }
 
-  const edgeCount =
-    projected.type === "Polygon" ? points.length : points.length - 1;
+  const edgeCount = points.length - Number(projected.type === "Polygon");
   for (let i = 0; i < edgeCount; i++) {
     const start = points.at(i) as Vector<2>;
     const end = points.at((i + 1) % points.length) as Vector<2>;
-    if (segmentOverlapsScreen(start, end, projectOptions.screenDim)) {
+    if (segmentOverlapsScreen(start, end, screenDim)) {
       return true;
     }
   }

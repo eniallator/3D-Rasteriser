@@ -13,7 +13,7 @@ function renderPoint(
   ctx: CanvasRenderingContext2D,
   point: ProjectedPoint
 ): void {
-  optSetFill(ctx, point.primitive.style, point);
+  optSetFill(ctx, point.primitive.style, [point, ctx]);
   ctx.beginPath();
   ctx.arc(
     ...point.projected.toArray(),
@@ -25,9 +25,9 @@ function renderPoint(
   const { label } = point.primitive;
   if (label != null) {
     if (label.font != null) {
-      ctx.font = isFunction(label.font) ? label.font(point) : label.font;
+      ctx.font = isFunction(label.font) ? label.font(point, ctx) : label.font;
     }
-    optSetFill(ctx, label.style, point);
+    optSetFill(ctx, label.style, [point, ctx]);
     const textWidth = ctx.measureText(label.text).width;
     ctx.fillText(
       label.text,
@@ -45,7 +45,7 @@ function renderLine(ctx: CanvasRenderingContext2D, line: ProjectedLine): void {
   if (line.primitive.width != null) {
     ctx.lineWidth = line.primitive.width;
   }
-  optSetStroke(ctx, line.primitive.style, line);
+  optSetStroke(ctx, line.primitive.style, [line, ctx]);
   ctx.beginPath();
   for (const [i, projected] of line.projected.entries()) {
     ctx[i === 0 ? "moveTo" : "lineTo"](...projected.toArray());
@@ -57,7 +57,7 @@ function renderPolygon(
   ctx: CanvasRenderingContext2D,
   polygon: ProjectedPolygon
 ): void {
-  optSetFill(ctx, polygon.primitive.style, polygon);
+  optSetFill(ctx, polygon.primitive.style, [polygon, ctx]);
   ctx.beginPath();
   for (const [i, projected] of polygon.projected.entries()) {
     ctx[i === 0 ? "moveTo" : "lineTo"](...projected.toArray());

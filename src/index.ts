@@ -1,229 +1,64 @@
-import { tuple } from "niall-utils/core";
-import { Monad } from "niall-utils/functional";
+import { raise } from "niall-utils/core";
+import { Option } from "niall-utils/functional";
 import { Vector } from "vectyped";
 
 import type { Config } from "./config.ts";
 import { appMethods, type StatefulAppContext } from "./lib/types.ts";
 import rasterise from "./rasterise";
-import {
-  createPoint,
-  createPolygon,
-  type Primitive2D,
-} from "./rasterise/types";
+import { scenes } from "./scenes/index.ts";
+import type { Scene, SceneData } from "./scenes/types.ts";
 
-// interface Star {
-//   pos: Vector<3>;
-//   tail: Array<Vector<3>>;
-// }
-
-// interface StarState {
-//   stars: Array<Star>;
-//   dirNorm: Vector<3>;
-//   lastSpawned: number;
-// }
-
-interface CubeState {
-  dirNorm: Vector<3>;
+interface State {
+  scene: Scene;
+  sceneData: SceneData | null;
 }
-
-// function createStar(boxSize: number): Star {
-//   return {
-//     pos: Vector.create(
-//       boxSize / 2,
-//       boxSize * Math.random() - boxSize / 2,
-//       boxSize * Math.random() - boxSize / 2
-//     ),
-//     tail: [],
-//   };
-// }
-
-// function animationFrame({
-//   paramConfig,
-//   ctx,
-//   canvas,
-//   state,
-//   time,
-// }: AppContextWithState<typeof config, StarState>) {
-//   const { stars, dirNorm } = state;
-//   let { lastSpawned } = state;
-//   ctx.strokeStyle = "white";
-//   ctx.fillStyle = "black";
-//   ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-//   const boxSize = paramConfig.getVal("box-size");
-//   for (let i = stars.length - 1; i >= 0; i--) {
-//     if (stars[i].pos.x() < 0) {
-//       stars.splice(i, 1);
-//     }
-//   }
-
-//   const now = Date.now();
-
-//   const spawnDelay = paramConfig.getVal("spawn-delay-seconds");
-//   while (
-//     stars.length < paramConfig.getVal("max-stars") &&
-//     (spawnDelay === 0 || lastSpawned + spawnDelay * 1000 < now)
-//   ) {
-//     stars.push(createStar(boxSize));
-//     lastSpawned = now;
-//   }
-
-//   const screenDim = Vector.create(canvas.width, canvas.height);
-//   const posDelta = Vector.create(
-//     time.delta * -paramConfig.getVal("speed"),
-//     0,
-//     0
-//   );
-
-//   ctx.lineWidth = (screenDim.getMin() / 100) * paramConfig.getVal("star-size");
-//   ctx.lineCap = "round";
-//   for (const star of stars) {
-//     ctx.beginPath();
-//     let first = true;
-//     for (const pos of [star.pos, ...star.tail]) {
-//       const screenPos = project(dirNorm, pos, paramConfig.getVal("fov"))
-//         ?.add(0.5)
-//         .multiply(screenDim);
-
-//       if (screenPos != null) {
-//         if (first) {
-//           first = false;
-//           ctx.moveTo(screenPos.x(), screenPos.y());
-//           ctx.lineTo(screenPos.x(), screenPos.y());
-//         } else {
-//           ctx.lineTo(screenPos.x(), screenPos.y());
-//         }
-//       }
-//     }
-//     ctx.stroke();
-//     star.tail = [star.pos.copy(), ...star.tail];
-//     star.pos.add(posDelta);
-//     const tailSizeSquared = paramConfig.getVal("tail-size") ** 2;
-//     for (let i = star.tail.length - 1; i >= 0; i--) {
-//       if (
-//         star.tail[i].copy().sub(star.pos).getSquaredMagnitude() >
-//         tailSizeSquared
-//       ) {
-//         star.tail.pop();
-//       } else {
-//         break;
-//       }
-//     }
-//   }
-
-//   return { stars, lastSpawned, dirNorm };
-// }
-
-// export default appMethods.stateful<typeof config, StarState>({
-//   init: () => ({
-//     stars: [],
-//     dirNorm: Vector.create(1, 0, 0),
-//     lastSpawned: Date.now(),
-//   }),
-//   animationFrame,
-// });
 
 function animationFrame({
   seriform,
   ctx,
+  time,
   canvas,
   getState,
-  time,
-}: StatefulAppContext<Config, CubeState>) {
-  const { dirNorm } = getState();
+  setState,
+}: StatefulAppContext<Config, State>) {
+  const { scene, sceneData } = getState();
   ctx.strokeStyle = "white";
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const progress = (time.now - time.start) * seriform.getValue("speed");
-  // const timeProgress = (Math.PI * 3) / 2;
-  // const progress = ((Math.PI * 1) / 2) * paramConfig.getVal("speed");
+  const nextData = Option.from(scene.animated ? seriform.getAllValues() : null)
+    .map(config => scene.update(config, time, sceneData))
+    .map<SceneData>(sceneResult => ({
+      sceneResult,
+      preparedScene: rasterise.prepareScene(sceneResult.primitives),
+    }))
+    .getOrElse(() => sceneData ?? raise(new Error("Expected SceneData")));
 
-  const cubeAngle = progress % (Math.PI * 2);
-  const cubeCenter = Vector.zero(3);
+  setState({ scene, sceneData: nextData });
 
-  // point components are either 0 or 1
-  const processCubeCorner = (point: Vector<3>): Vector<3> =>
-    Monad.from(point)
-      .map(point => {
-        const [x, y, z] = point.copy().sub(0.5).toArray();
-        const [rotX, rotY] = Vector.create(x, y)
-          .rotate(Vector.zero(2), cubeAngle)
-          .toArray();
-        return Vector.create(rotX, rotY, z);
-      })
-      .map(point => point.add(cubeCenter))
-      .get();
-
-  ctx.lineWidth = 3;
-
-  const primitives: Primitive2D[] = [
-    createPoint({
-      label: { text: "Test Cube", style: "white", font: "30px sans-serif" },
-      point: cubeCenter,
-      radius: 30,
-      style: ({ projected }) => {
-        const gradient = ctx.createRadialGradient(
-          ...projected.toArray(),
-          0,
-          ...projected.toArray(),
-          30
-        );
-        gradient.addColorStop(0, "rgba(255, 255, 255, 1)");
-        gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
-        return gradient;
-      },
-    }),
-  ];
-
-  for (let i = 0; i < 2; i++) {
-    for (let j = 0; j < 2; j++) {
-      const cornerPoint = Vector.create(i, j, (i + j) % 2);
-      for (let k = 0; k < 3; k++) {
-        const points = tuple(
-          cornerPoint,
-          cornerPoint.with(k, (cornerPoint.valueOf(k) + 1) % 2),
-          cornerPoint.with(
-            (k + 1) % 3,
-            (cornerPoint.valueOf((k + 1) % 3) + 1) % 2
-          )
-        );
-
-        primitives.push(
-          createPolygon({
-            points: points.map(processCubeCorner) as typeof points,
-            style: `rgb(${Vector.zero(3)
-              .add(...points)
-              .divide(points.length)
-              .multiply(255)
-              .toArray()
-              .join(", ")})`,
-          })
-        );
-      }
-    }
-  }
-
-  rasterise.fullPipeline(
-    primitives,
+  rasterise.renderPrepared(
+    nextData.preparedScene,
     {
-      viewPos: Vector.create(
-        -2.5,
-        Math.cos(progress) / 1.5,
-        Math.sin(progress) / 1.5
-      ),
-      dirNorm,
-      fov: seriform.getValue("fov"),
+      ...nextData.sceneResult.cameraOptions,
       screenDim: Vector.create(canvas.width, canvas.height),
     },
     { ctx }
   );
 }
 
-export const app = appMethods<Config, CubeState>({
-  init: () => ({
-    points: [],
-    dirNorm: Vector.create(1, 0, 0),
-  }),
+export const app = appMethods<Config, State>({
+  init: ({ seriform, time }) => {
+    const scene = scenes[seriform.getValue("scene")];
+    return {
+      scene,
+      sceneData: Option.from(scene.animated ? null : seriform.getAllValues())
+        .map(config => scene.update(config, time, null))
+        .map<SceneData>(sceneResult => ({
+          sceneResult,
+          preparedScene: rasterise.prepareScene(sceneResult.primitives),
+        }))
+        .getOrNull(),
+    };
+  },
   animationFrame,
 });

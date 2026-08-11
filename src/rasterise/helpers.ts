@@ -6,23 +6,23 @@ import type { AABB, FillStyle, Plane, Primitive2D, StrokeStyle } from "./types";
 
 export const IMPRECISION_THRESHOLD = 1e-5;
 
-export function optSetStroke<A>(
+export function optSetStroke<A extends readonly unknown[]>(
   ctx: CanvasRenderingContext2D,
   style: StrokeStyle<A> | undefined,
   args: A
 ): void {
   if (style != null) {
-    ctx.strokeStyle = isFunction(style) ? style(args) : style;
+    ctx.strokeStyle = isFunction(style) ? style(...args) : style;
   }
 }
 
-export function optSetFill<A>(
+export function optSetFill<A extends readonly unknown[]>(
   ctx: CanvasRenderingContext2D,
   style: FillStyle<A> | undefined,
   args: A
 ): void {
   if (style != null) {
-    ctx.fillStyle = isFunction(style) ? style(args) : style;
+    ctx.fillStyle = isFunction(style) ? style(...args) : style;
   }
 }
 

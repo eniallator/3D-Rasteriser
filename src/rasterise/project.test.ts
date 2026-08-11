@@ -1,8 +1,12 @@
 import { Vector } from "vectyped";
 import { describe, expect, it } from "vitest";
 
-import { cameraBasis, project, projectPrimitive } from "./project";
-import type { ProjectOptions } from "./project";
+import {
+  cameraBasis,
+  project,
+  projectPrimitive,
+  type ProjectOptions,
+} from "./project";
 import { createLine, createPoint, createPolygon } from "./types";
 
 const baseOptions: ProjectOptions = {
@@ -23,9 +27,9 @@ describe("cameraBasis", () => {
     expect(basis.xAxis.dot(basis.yAxis)).toBeCloseTo(0);
 
     expect(basis.screenCenterPos.getMagnitude()).toBeCloseTo(1);
-    expect(basis.screenCenterPos.getNorm().dot(baseOptions.dirNorm)).toBeCloseTo(
-      1
-    );
+    expect(
+      basis.screenCenterPos.getNorm().dot(baseOptions.dirNorm)
+    ).toBeCloseTo(1);
   });
 
   it("scales screenCenterPos inversely with fov", () => {

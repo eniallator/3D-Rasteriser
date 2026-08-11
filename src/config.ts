@@ -1,12 +1,18 @@
 import {
   createParsers,
   rangeParser,
+  selectParser,
   type InitParserObject,
   type SeriFormOptions,
 } from "seriform";
 
 export const options: SeriFormOptions = { query: location.search };
 export const config = createParsers({
+  scene: selectParser({
+    label: "Scene",
+    options: ["Spinning Cube"],
+    default: "Spinning Cube",
+  }),
   fov: rangeParser({
     label: "Field of vision",
     default: 1.5,

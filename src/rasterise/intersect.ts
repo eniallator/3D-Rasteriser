@@ -184,10 +184,7 @@ export function cutPolygonSignedDistances(
     if (sDist >= 0 !== nextSDist >= 0) {
       const pointOnPlane = point
         .copy()
-        .lerp(
-          sDist / (sDist - nextSDist),
-          polygon.points[nextI] as Vector<3>
-        );
+        .lerp(sDist / (sDist - nextSDist), polygon.points[nextI] as Vector<3>);
       currentPoints.push(pointOnPlane);
       polygons.push(
         createPolygon({ points: currentPoints as Polygon["points"] })
@@ -200,7 +197,9 @@ export function cutPolygonSignedDistances(
   return polygons;
 }
 
-export function resolveIntersections(primitives: Primitive2D[]): Primitive2D[] {
+export function resolveIntersections(
+  primitives: readonly Primitive2D[]
+): Primitive2D[] {
   const polygonPlanes = new Map<Polygon, Plane>();
   const planeFor = (polygon: Polygon): Plane => {
     let plane = polygonPlanes.get(polygon);
