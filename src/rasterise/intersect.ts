@@ -173,7 +173,7 @@ export function cutPolygonSignedDistances(
   signedDistances: number[]
 ): Polygon[] {
   const polygons: Polygon[] = [];
-  let currentPoints = [polygon.points[0]];
+  let currentPoints: Vector<3>[] = [];
 
   for (const [i, point] of polygon.points.entries()) {
     currentPoints.push(point);
@@ -187,7 +187,11 @@ export function cutPolygonSignedDistances(
         .lerp(sDist / (sDist - nextSDist), polygon.points[nextI] as Vector<3>);
       currentPoints.push(pointOnPlane);
       polygons.push(
-        createPolygon({ points: currentPoints as Polygon["points"] })
+        createPolygon({
+          points: currentPoints as Polygon["points"],
+          style: polygon.style,
+          original: polygon.original ?? polygon,
+        })
       );
       currentPoints = [pointOnPlane];
     }

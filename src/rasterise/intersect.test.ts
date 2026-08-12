@@ -1,6 +1,7 @@
 import { Vector } from "vectyped";
 import { describe, expect, it } from "vitest";
 
+import { pointsToPlane } from "./helpers";
 import { cutPolygonSignedDistances, resolveIntersections } from "./intersect";
 import {
   createLine,
@@ -38,6 +39,37 @@ describe("cutPolygonSignedDistances", () => {
     });
     const pieces = cutPolygonSignedDistances(polygon, [1, 1, 2, 2]);
     expect(pieces).toEqual([]);
+  });
+
+  it("carries the original polygon's style onto both split pieces", () => {
+    const polygon = createPolygon({
+      points: [vec3(0, 1), vec3(1, 1), vec3(1, -1), vec3(0, -1)],
+      style: "brown",
+    });
+    const pieces = cutPolygonSignedDistances(polygon, [1, 1, -1, -1]);
+
+    expect(pieces).toHaveLength(2);
+    for (const piece of pieces) {
+      expect(piece.style).toBe("brown");
+    }
+  });
+
+  it("never duplicates the polygon's first point as consecutive leading vertices", () => {
+    const polygon = createPolygon({
+      points: [vec3(0, 1), vec3(1, 1), vec3(1, -1), vec3(0, -1)],
+    });
+    const pieces = cutPolygonSignedDistances(polygon, [1, 1, -1, -1]);
+
+    for (const piece of pieces) {
+      for (let i = 0; i < piece.points.length; i++) {
+        const curr = piece.points[i];
+        const next = piece.points[(i + 1) % piece.points.length];
+        expect(curr.equals(next)).toBe(false);
+      }
+      expect(
+        Number.isNaN(pointsToPlane(piece.points).norm.getSquaredMagnitude())
+      ).toBe(false);
+    }
   });
 });
 

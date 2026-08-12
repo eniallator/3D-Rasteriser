@@ -42,14 +42,22 @@ function clipLineToPlane(line: Line, plane: Plane): Line[] {
         .lerp(curr.dist / (curr.dist - next.dist), next.point);
       current.push(crossing);
       if (current.length > 1) {
-        lines.push(createLine({ ...line, points: current }));
+        lines.push(
+          createLine({
+            ...line,
+            points: current,
+            original: line.original ?? line,
+          })
+        );
       }
       current = next.dist >= 0 ? [crossing] : [];
     }
     if (next.dist >= 0) current.push(next.point);
   }
   if (current.length > 1) {
-    lines.push(createLine({ ...line, points: current }));
+    lines.push(
+      createLine({ ...line, points: current, original: line.original ?? line })
+    );
   }
   return lines;
 }
@@ -69,12 +77,35 @@ function clipPolygonToPlane(polygon: Polygon, plane: Plane): Polygon[] {
   });
 }
 
+// A point at exactly zero depth from the camera sits on the plane through
+// the camera perpendicular to the view direction - project() divides by
+// that depth to find where the point falls on the view plane, so a vertex
+// placed there (as clipping exactly at depth 0 would produce) divides by
+// zero and projects to NaN, silently dropping whatever it's part of.
+// Clipping a hair in front of the camera instead keeps depth strictly
+// positive, so every projectable point stays projectable.
+//
+// This isn't a geometric "close enough to coincident" tolerance (that's
+// IMPRECISION_THRESHOLD, elsewhere) - it controls how far a grazing vertex's
+// projected screen position can blow up, since that position scales with
+// roughly 1/depth. Too small (IMPRECISION_THRESHOLD's 1e-5 measured in the
+// hundreds of thousands of pixels once a scene has geometry close to the
+// camera) and a fragment can end up with one vertex far enough from its
+// others to visibly distort its fill shape, even though every coordinate is
+// technically still finite. 0.01 world units keeps that projected distance
+// in the thousands of pixels - imperceptible geometrically, but small enough
+// not to visibly warp anything.
+const NEAR_PLANE_EPSILON = 0.01;
+
 export function clipPrimitivesToCamera(
   primitives: Primitive2D[],
   projectOptions: ProjectOptions
 ): Primitive2D[] {
   const { dirNorm, viewPos } = projectOptions;
-  const plane = { norm: dirNorm, d: -dirNorm.dot(viewPos) };
+  const plane = {
+    norm: dirNorm,
+    d: -dirNorm.dot(viewPos) - NEAR_PLANE_EPSILON,
+  };
   return primitives.flatMap((primitive): Primitive2D[] => {
     switch (primitive.type) {
       case "Point":

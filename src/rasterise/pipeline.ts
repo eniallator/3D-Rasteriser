@@ -2,7 +2,13 @@ import { tuple } from "niall-utils/core";
 import { mapFilter } from "niall-utils/functional";
 
 import { buildBSPTree, traverseBackToFront } from "./bsp";
-import { buildBVH, buildFrustumPlanes, queryFrustum } from "./bvh";
+import {
+  aabbInFrustum,
+  buildBVH,
+  buildFrustumPlanes,
+  primitiveBounds,
+  queryFrustum,
+} from "./bvh";
 import { clipPrimitivesToCamera, isPrimitiveOnScreen } from "./clip";
 import { findSqrDist } from "./helpers";
 import { resolveIntersections } from "./intersect";
@@ -37,7 +43,7 @@ export function naivePipeline(
       ctx.strokeStyle = defaultStroke ?? "white";
       ctx.font = defaultFont ?? "inherit";
 
-      renderPrimitive(ctx, projected);
+      renderPrimitive(ctx, projected, projectOptions);
     });
 }
 
@@ -53,13 +59,17 @@ export function renderPrepared(
   projectOptions: ProjectOptions,
   { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
-  const visible = new Set(
-    queryFrustum(bvh, buildFrustumPlanes(projectOptions))
-  );
+  const frustumPlanes = buildFrustumPlanes(projectOptions);
+  // Primitives that survive the BSP tree's straddling splits are new objects,
+  // not the ones the BVH indexed, so a reference-based Set lookup would drop
+  // them; fall back to a direct bounds check for anything the Set misses.
+  const visible = new Set(queryFrustum(bvh, frustumPlanes));
 
   clipPrimitivesToCamera(
-    traverseBackToFront(tree, projectOptions.viewPos).filter(primitive =>
-      visible.has(primitive)
+    traverseBackToFront(tree, projectOptions.viewPos).filter(
+      primitive =>
+        visible.has(primitive) ||
+        aabbInFrustum(primitiveBounds(primitive), frustumPlanes)
     ),
     projectOptions
   )
@@ -71,7 +81,7 @@ export function renderPrepared(
       ctx.fillStyle = defaultFill ?? "white";
       ctx.strokeStyle = defaultStroke ?? "white";
       ctx.font = defaultFont ?? "inherit";
-      renderPrimitive(ctx, projected);
+      renderPrimitive(ctx, projected, projectOptions);
     });
 }
 

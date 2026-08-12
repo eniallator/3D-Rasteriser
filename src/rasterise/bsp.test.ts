@@ -1,7 +1,7 @@
 import { Vector } from "vectyped";
 import { describe, expect, it } from "vitest";
 
-import { buildBSPTree, traverseBackToFront } from "./bsp";
+import { buildBSPTree, sampleIndices, traverseBackToFront } from "./bsp";
 import {
   createLine,
   createPoint,
@@ -93,6 +93,95 @@ describe("buildBSPTree", () => {
     const node = findNodeWithCoplanar(tree);
 
     expect(node.coplanar).toEqual(polys);
+  });
+
+  it("chooses the same splitter across rebuilds of a scene above the sampling cap, even when the ideal splitter narrowly makes or misses the sampled pool", () => {
+    const verticalQuad = (x: number): Polygon =>
+      createPolygon({
+        points: [
+          vec3(x, -1, -1),
+          vec3(x, 1, -1),
+          vec3(x, 1, 1),
+          vec3(x, -1, 1),
+        ],
+      });
+
+    const buildScene = (): Polygon[] => {
+      const great = createPolygon({ ...verticalQuad(0), style: "great" });
+      const targets = [verticalQuad(5), verticalQuad(-5)];
+      const decoys = Array.from({ length: 24 }, (_, i) =>
+        verticalQuad(i < 12 ? 1000 + i : -1000 - i)
+      );
+      return [great, ...targets, ...decoys];
+    };
+
+    const outcomes = Array.from({ length: 15 }, () => {
+      const tree = buildBSPTree(buildScene());
+      return tree.type === "branch" && tree.coplanar[0]?.style === "great";
+    });
+
+    expect(new Set(outcomes).size).toBe(1);
+  });
+
+  it("doesn't let Point primitives sway which polygon is chosen as splitter", () => {
+    const candidateA = createPolygon({
+      points: [vec3(0, -1, -1), vec3(0, 1, -1), vec3(0, 1, 1), vec3(0, -1, 1)],
+      style: "A",
+    });
+    const candidateB = createPolygon({
+      points: [vec3(-1, -1, 0), vec3(1, -1, 0), vec3(1, 1, 0), vec3(-1, 1, 0)],
+      style: "B",
+    });
+    const balancers = [
+      createPolygon({
+        points: [vec3(5, -1, 4), vec3(6, -1, 4), vec3(6, 1, 4), vec3(5, 1, 4)],
+      }),
+      createPolygon({
+        points: [
+          vec3(-6, -1, 3),
+          vec3(-5, -1, 3),
+          vec3(-5, 1, 3),
+          vec3(-6, 1, 3),
+        ],
+      }),
+    ];
+
+    const swayingPoints = Array.from({ length: 20 }, (_, i) =>
+      createPoint({ point: vec3(10, 0, i < 10 ? 10 : -10) })
+    );
+
+    const tree = buildBSPTree([
+      candidateA,
+      candidateB,
+      ...balancers,
+      ...swayingPoints,
+    ]);
+
+    expect(tree.type === "branch" && tree.coplanar[0]?.style).toBe("A");
+  });
+});
+
+describe("sampleIndices", () => {
+  it("returns the same indices every time for the same pool/count, so a scene rebuilt every frame picks the same splitter candidates", () => {
+    const first = sampleIndices(30, 20);
+    const second = sampleIndices(30, 20);
+
+    expect(second).toEqual(first);
+  });
+
+  it("returns `count` unique in-bounds indices when the pool is larger than count", () => {
+    const indices = sampleIndices(30, 20);
+
+    expect(indices).toHaveLength(20);
+    expect(new Set(indices).size).toBe(20);
+    for (const index of indices) {
+      expect(index).toBeGreaterThanOrEqual(0);
+      expect(index).toBeLessThan(30);
+    }
+  });
+
+  it("returns every index in order when the pool is at or below count", () => {
+    expect(sampleIndices(5, 20)).toEqual([0, 1, 2, 3, 4]);
   });
 });
 

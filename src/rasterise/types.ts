@@ -43,6 +43,13 @@ export interface ProjectedPolygon {
 export type ProjectedPrimitive =
   ProjectedPoint | ProjectedLine | ProjectedPolygon;
 
+export interface SplitStyleArg<
+  Projected extends ProjectedLine | ProjectedPolygon,
+> {
+  original: Projected;
+  fragment?: Projected;
+}
+
 export type ToProjected<A extends Primitive2D> = {
   [P in ProjectedPrimitive as P["type"]]: P;
 }[A["type"]];
@@ -64,13 +71,17 @@ export interface Line {
   type: "Line";
   points: Vector<3>[];
   width?: number;
-  style?: StrokeStyle<[ProjectedLine, CanvasRenderingContext2D]>;
+  style?: StrokeStyle<[SplitStyleArg<ProjectedLine>, CanvasRenderingContext2D]>;
+  original?: Line;
 }
 
 export interface Polygon {
   type: "Polygon";
   points: [Vector<3>, Vector<3>, Vector<3>, ...Vector<3>[]];
-  style?: FillStyle<[ProjectedPolygon, CanvasRenderingContext2D]>;
+  style?: FillStyle<
+    [SplitStyleArg<ProjectedPolygon>, CanvasRenderingContext2D]
+  >;
+  original?: Polygon;
 }
 
 export type Primitive1D = Point | Line;

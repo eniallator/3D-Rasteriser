@@ -1,3 +1,4 @@
+import { tuple } from "niall-utils/core";
 import { Vector } from "vectyped";
 import { describe, expect, it, vi } from "vitest";
 
@@ -20,44 +21,58 @@ function fakeCtx(): CanvasRenderingContext2D {
 describe("optSetStroke", () => {
   it("sets strokeStyle directly when given a plain value", () => {
     const ctx = fakeCtx();
-    optSetStroke(ctx, "red", []);
+    optSetStroke(ctx, "red", () => []);
     expect(ctx.strokeStyle).toBe("red");
   });
 
   it("calls the style function with args and sets the result", () => {
     const ctx = fakeCtx();
     const style = vi.fn((..._args: [string, string]) => "blue");
-    optSetStroke(ctx, style, ["the", "args"]);
+    optSetStroke(ctx, style, () => tuple("the", "args"));
     expect(style).toHaveBeenCalledWith("the", "args");
     expect(ctx.strokeStyle).toBe("blue");
   });
 
   it("does nothing when style is undefined", () => {
     const ctx = fakeCtx();
-    optSetStroke(ctx, undefined, []);
+    optSetStroke(ctx, undefined, () => []);
     expect(ctx.strokeStyle).toBeUndefined();
+  });
+
+  it("never calls getArgs when style is a plain value, since building the args can be expensive", () => {
+    const ctx = fakeCtx();
+    const getArgs = vi.fn((): [] => []);
+    optSetStroke(ctx, "red", getArgs);
+    expect(getArgs).not.toHaveBeenCalled();
   });
 });
 
 describe("optSetFill", () => {
   it("sets fillStyle directly when given a plain value", () => {
     const ctx = fakeCtx();
-    optSetFill(ctx, "green", []);
+    optSetFill(ctx, "green", () => []);
     expect(ctx.fillStyle).toBe("green");
   });
 
   it("calls the style function with args and sets the result", () => {
     const ctx = fakeCtx();
     const style = vi.fn((..._args: [string]) => "yellow");
-    optSetFill(ctx, style, ["the-args"]);
+    optSetFill(ctx, style, () => tuple("the-args"));
     expect(style).toHaveBeenCalledWith("the-args");
     expect(ctx.fillStyle).toBe("yellow");
   });
 
   it("does nothing when style is undefined", () => {
     const ctx = fakeCtx();
-    optSetFill(ctx, undefined, []);
+    optSetFill(ctx, undefined, () => []);
     expect(ctx.fillStyle).toBeUndefined();
+  });
+
+  it("never calls getArgs when style is a plain value, since building the args can be expensive", () => {
+    const ctx = fakeCtx();
+    const getArgs = vi.fn((): [] => []);
+    optSetFill(ctx, "green", getArgs);
+    expect(getArgs).not.toHaveBeenCalled();
   });
 });
 

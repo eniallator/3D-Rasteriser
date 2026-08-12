@@ -1,6 +1,7 @@
 import { Vector } from "vectyped";
 import { describe, expect, it, vi } from "vitest";
 
+import type { ProjectOptions } from "./project";
 import { renderPrimitive } from "./render";
 import {
   createLine,
@@ -11,9 +12,17 @@ import {
   type ProjectedPolygon,
 } from "./types";
 
+const projectOptions: ProjectOptions = {
+  viewPos: Vector.create(0, 0, 0),
+  dirNorm: Vector.create(0, 0, 1),
+  fov: 1,
+  screenDim: Vector.create(800, 600),
+};
+
 function fakeCtx() {
   const mocks = {
     beginPath: vi.fn(),
+    closePath: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
     arc: vi.fn(),
@@ -36,7 +45,7 @@ describe("renderPrimitive - Point", () => {
       projected: Vector.create(10, 20),
     };
 
-    renderPrimitive(ctx, projected);
+    renderPrimitive(ctx, projected, projectOptions);
 
     expect(beginPath).toHaveBeenCalledOnce();
     expect(arc).toHaveBeenCalledWith(10, 20, 1, 0, 2 * Math.PI);
@@ -58,7 +67,7 @@ describe("renderPrimitive - Point", () => {
       projected: Vector.create(10, 20),
     };
 
-    renderPrimitive(ctx, projected);
+    renderPrimitive(ctx, projected, projectOptions);
 
     expect(arc).toHaveBeenCalledWith(10, 20, 7, 0, 2 * Math.PI);
     expect(style).toHaveBeenCalledWith(projected, ctx);
@@ -77,7 +86,7 @@ describe("renderPrimitive - Point", () => {
       projected: Vector.create(100, 50),
     };
 
-    renderPrimitive(ctx, projected);
+    renderPrimitive(ctx, projected, projectOptions);
 
     // measureText returns width 40, so text is centered: x - 40/2 = 80.
     expect(fillText).toHaveBeenCalledWith("hi", 80, 50, undefined);
@@ -96,7 +105,7 @@ describe("renderPrimitive - Line", () => {
       projected: [Vector.create(0, 0), Vector.create(10, 10)],
     };
 
-    renderPrimitive(ctx, projected);
+    renderPrimitive(ctx, projected, projectOptions);
 
     expect(beginPath).toHaveBeenCalledOnce();
     expect(moveTo).toHaveBeenCalledWith(0, 0);
@@ -116,9 +125,61 @@ describe("renderPrimitive - Line", () => {
       projected: [Vector.create(0, 0), Vector.create(10, 10)],
     };
 
-    renderPrimitive(ctx, projected);
+    renderPrimitive(ctx, projected, projectOptions);
 
     expect(ctx.lineWidth).toBe(5);
+  });
+
+  it("calls a style function with {original: self} when the line was never split", () => {
+    const { ctx } = fakeCtx();
+    const style = vi.fn(() => "blue");
+    const line = createLine({
+      points: [Vector.create(0, 0, 0), Vector.create(1, 1, 1)],
+      style,
+    });
+    const projected: ProjectedLine = {
+      type: "Line",
+      primitive: line,
+      projected: [Vector.create(0, 0), Vector.create(10, 10)],
+    };
+
+    renderPrimitive(ctx, projected, projectOptions);
+
+    expect(style).toHaveBeenCalledWith({ original: projected }, ctx);
+    expect(ctx.strokeStyle).toBe("blue");
+  });
+
+  it("calls a style function with {fragment, original} when the line was split, projecting the whole original", () => {
+    const { ctx } = fakeCtx();
+    const style = vi.fn(() => "blue");
+    const wholeOriginal = createLine({
+      points: [Vector.create(0, 0, 1), Vector.create(4, 0, 1)],
+    });
+    const fragment = createLine({
+      points: [Vector.create(0, 0, 1), Vector.create(2, 0, 1)],
+      style,
+      original: wholeOriginal,
+    });
+    const projected: ProjectedLine = {
+      type: "Line",
+      primitive: fragment,
+      projected: [Vector.create(400, 300), Vector.create(600, 300)],
+    };
+
+    renderPrimitive(ctx, projected, projectOptions);
+
+    expect(style).toHaveBeenCalledOnce();
+    const [arg] = style.mock.calls[0] as [
+      { fragment?: ProjectedLine; original: ProjectedLine },
+      CanvasRenderingContext2D,
+    ];
+    expect(arg.fragment).toBe(projected);
+    expect(arg.original.primitive).toBe(wholeOriginal);
+    // The original spans x 0..4 in world space, wider than the fragment's
+    // x 0..2 - its projection should reflect the whole (unsplit) shape.
+    expect(arg.original.projected[0]?.x()).not.toBe(
+      arg.original.projected[1]?.x()
+    );
   });
 });
 
@@ -142,7 +203,7 @@ describe("renderPrimitive - Polygon", () => {
       ],
     };
 
-    renderPrimitive(ctx, projected);
+    renderPrimitive(ctx, projected, projectOptions);
 
     expect(beginPath).toHaveBeenCalledOnce();
     expect(moveTo).toHaveBeenCalledWith(0, 0);
@@ -151,7 +212,7 @@ describe("renderPrimitive - Polygon", () => {
     expect(fill).toHaveBeenCalledOnce();
   });
 
-  it("calls a style function with the projected primitive to set fillStyle", () => {
+  it("calls a style function with {original: self} when the polygon was never split", () => {
     const { ctx } = fakeCtx();
     const style = vi.fn(() => "orange");
     const polygon = createPolygon({
@@ -172,9 +233,88 @@ describe("renderPrimitive - Polygon", () => {
       ],
     };
 
-    renderPrimitive(ctx, projected);
+    renderPrimitive(ctx, projected, projectOptions);
 
-    expect(style).toHaveBeenCalledWith(projected, ctx);
+    expect(style).toHaveBeenCalledWith({ original: projected }, ctx);
     expect(ctx.fillStyle).toBe("orange");
+  });
+
+  it("calls a style function with {fragment, original} when the polygon was split, projecting the whole original - not just the fragment's own bounds", () => {
+    const { ctx } = fakeCtx();
+    const style = vi.fn(() => "orange");
+    const wholeOriginal = createPolygon({
+      points: [
+        Vector.create(0, 0, 1),
+        Vector.create(4, 0, 1),
+        Vector.create(4, 4, 1),
+        Vector.create(0, 4, 1),
+      ],
+    });
+    const fragment = createPolygon({
+      points: [
+        Vector.create(0, 0, 1),
+        Vector.create(2, 0, 1),
+        Vector.create(2, 4, 1),
+        Vector.create(0, 4, 1),
+      ],
+      style,
+      original: wholeOriginal,
+    });
+    const projected: ProjectedPolygon = {
+      type: "Polygon",
+      primitive: fragment,
+      projected: [
+        Vector.create(400, 300),
+        Vector.create(500, 300),
+        Vector.create(500, 400),
+        Vector.create(400, 400),
+      ],
+    };
+
+    renderPrimitive(ctx, projected, projectOptions);
+
+    expect(style).toHaveBeenCalledOnce();
+    const [arg] = style.mock.calls[0] as [
+      { fragment?: ProjectedPolygon; original: ProjectedPolygon },
+      CanvasRenderingContext2D,
+    ];
+    expect(arg.fragment).toBe(projected);
+    expect(arg.original.primitive).toBe(wholeOriginal);
+    // Fragment's own projected width is 100 (400->500); the whole original
+    // (twice as wide in world space) should project wider than that.
+    const originalXs = arg.original.projected.map(p => p.x());
+    expect(Math.max(...originalXs) - Math.min(...originalXs)).toBeGreaterThan(
+      100
+    );
+  });
+
+  it("closes the path and strokes it in the same colour as the fill, to hide anti-aliasing seams between abutting polygons", () => {
+    const { ctx, closePath, fill, stroke } = fakeCtx();
+    const polygon = createPolygon({
+      points: [
+        Vector.create(0, 0, 0),
+        Vector.create(1, 0, 0),
+        Vector.create(0, 1, 0),
+      ],
+      style: "orange",
+    });
+    const projected: ProjectedPolygon = {
+      type: "Polygon",
+      primitive: polygon,
+      projected: [
+        Vector.create(0, 0),
+        Vector.create(10, 0),
+        Vector.create(0, 10),
+      ],
+    };
+
+    renderPrimitive(ctx, projected, projectOptions);
+
+    expect(closePath).toHaveBeenCalledOnce();
+    expect(fill.mock.invocationCallOrder[0]).toBeLessThan(
+      stroke.mock.invocationCallOrder[0]
+    );
+    expect(stroke).toHaveBeenCalledOnce();
+    expect(ctx.strokeStyle).toBe("orange");
   });
 });

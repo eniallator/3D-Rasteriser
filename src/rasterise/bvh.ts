@@ -131,8 +131,10 @@ const aabbOutsidePlane = (bounds: AABB<3>, plane: Plane): boolean =>
     plane.d <
   0;
 
-const aabbInFrustum = (bounds: AABB<3>, frustumPlanes: Plane[]): boolean =>
-  !frustumPlanes.some(plane => aabbOutsidePlane(bounds, plane));
+export const aabbInFrustum = (
+  bounds: AABB<3>,
+  frustumPlanes: Plane[]
+): boolean => !frustumPlanes.some(plane => aabbOutsidePlane(bounds, plane));
 
 export function queryFrustum(
   node: BVHNode,

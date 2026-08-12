@@ -6,10 +6,10 @@ import type { Config } from "./config.ts";
 import { appMethods, type StatefulAppContext } from "./lib/types.ts";
 import rasterise from "./rasterise";
 import { scenes } from "./scenes/index.ts";
-import type { Scene, SceneData } from "./scenes/types.ts";
+import type { SceneData } from "./scenes/types.ts";
 
 interface State {
-  scene: Scene;
+  sceneId: Config["scene"];
   sceneData: SceneData | null;
 }
 
@@ -21,7 +21,16 @@ function animationFrame({
   getState,
   setState,
 }: StatefulAppContext<Config, State>) {
-  const { scene, sceneData } = getState();
+  let { sceneId, sceneData } = getState();
+
+  const nextId = seriform.getValue("scene");
+  if (nextId !== sceneId) {
+    sceneId = nextId;
+    sceneData = null;
+  }
+
+  const scene = scenes[sceneId];
+
   ctx.strokeStyle = "white";
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -34,7 +43,7 @@ function animationFrame({
     }))
     .getOrElse(() => sceneData ?? raise(new Error("Expected SceneData")));
 
-  setState({ scene, sceneData: nextData });
+  setState({ sceneId, sceneData: nextData });
 
   rasterise.renderPrepared(
     nextData.preparedScene,
@@ -48,9 +57,10 @@ function animationFrame({
 
 export const app = appMethods<Config, State>({
   init: ({ seriform, time }) => {
-    const scene = scenes[seriform.getValue("scene")];
+    const sceneId = seriform.getValue("scene");
+    const scene = scenes[sceneId];
     return {
-      scene,
+      sceneId,
       sceneData: Option.from(scene.animated ? null : seriform.getAllValues())
         .map(config => scene.update(config, time, null))
         .map<SceneData>(sceneResult => ({

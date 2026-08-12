@@ -24,6 +24,7 @@ const projectOptions: ProjectOptions = {
 function fakeCtx() {
   const mocks = {
     beginPath: vi.fn(),
+    closePath: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
     arc: vi.fn(),
@@ -141,6 +142,25 @@ describe("renderPrepared", () => {
     expect(moveTo).toHaveBeenCalledTimes(2);
     expect(moveTo.mock.calls[0]).toEqual([farScreen.x(), farScreen.y()]);
     expect(moveTo.mock.calls[1]).toEqual([nearScreen.x(), nearScreen.y()]);
+  });
+
+  it("still renders both pieces of a polygon the BSP tree had to split, instead of dropping them from the frustum-visibility check", () => {
+    const { ctx, fill } = fakeCtx();
+    // Chosen as the BSP root splitter: `straddler` straddles its z=5 plane,
+    // so `straddler` gets cut into two new polygon objects that were never
+    // indexed by the BVH the frustum-visibility Set is built from.
+    const splitter = createPolygon({
+      points: [vec3(-2, -2, 5), vec3(2, -2, 5), vec3(2, 2, 5), vec3(-2, 2, 5)],
+    });
+    const straddler = createPolygon({
+      points: [vec3(-1, -1, 4), vec3(1, -1, 6), vec3(1, 1, 6), vec3(-1, 1, 4)],
+    });
+
+    const scene = prepareScene([splitter, straddler]);
+    renderPrepared(scene, projectOptions, { ctx });
+
+    // splitter (1 draw) + straddler's two split pieces (2 draws) = 3.
+    expect(fill).toHaveBeenCalledTimes(3);
   });
 });
 

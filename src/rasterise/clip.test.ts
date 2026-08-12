@@ -62,8 +62,10 @@ describe("clipPrimitivesToCamera", () => {
     const clipped = result[0] as ReturnType<typeof createLine>;
     expect(clipped.points).toHaveLength(2);
     expect(clipped.points.every(p => p.z() >= -1e-9)).toBe(true);
-    // Crossing point should be at z=0, the other endpoint kept as-is.
-    expect(clipped.points.some(p => Math.abs(p.z()) < 1e-9)).toBe(true);
+    // The near plane sits a hair in front of the camera (not exactly at it -
+    // a point at exactly zero depth can't be projected, see project()), so
+    // the crossing point lands just past z=0, not exactly on it.
+    expect(clipped.points.some(p => p.z() > 0 && p.z() < 0.02)).toBe(true);
     expect(clipped.points.some(p => p.z() === 1)).toBe(true);
   });
 

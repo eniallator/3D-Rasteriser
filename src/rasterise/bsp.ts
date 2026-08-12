@@ -65,7 +65,11 @@ function splitLineByPlane(
   const flush = (): void => {
     if (current.length > 1) {
       (currentIsFront ? front : back).push(
-        createLine({ ...line, points: current })
+        createLine({
+          ...line,
+          points: current,
+          original: line.original ?? line,
+        })
       );
     }
   };
@@ -123,23 +127,18 @@ function classifySideOnly(points: Vector<3>[], plane: Plane): Side {
 
 const MAX_SPLITTER_CANDIDATES = 20;
 
-function sampleIndices(poolSize: number, count: number): number[] {
+// Deterministic (not random) so that rebuilding the tree for the same scene
+// - which happens every frame for animated scenes - always picks the same
+// splitter candidates. Random sampling here made the whole tree shape, and
+// therefore where static geometry gets cut into pieces, change every frame.
+export function sampleIndices(poolSize: number, count: number): number[] {
   if (poolSize <= count) {
     return Array.from({ length: poolSize }, (_, i) => i);
   }
 
-  const swapped = new Map<number, number>();
-  const valueAt = (i: number): number => swapped.get(i) ?? i;
-
-  const picked: number[] = [];
-  let remaining = poolSize;
-  for (let i = 0; i < count; i++) {
-    const j = Math.floor(Math.random() * remaining);
-    picked.push(valueAt(j));
-    remaining--;
-    swapped.set(j, valueAt(remaining));
-  }
-  return picked;
+  return Array.from({ length: count }, (_, i) =>
+    Math.floor((i * poolSize) / count)
+  );
 }
 
 type PrimitiveEntry = [number, Primitive2D];
@@ -166,11 +165,13 @@ function pickBestSplitter(
     for (const primitive of primitives) {
       if (primitive === candidate) continue;
 
-      if (primitive.type === "Point") {
-        if (planeSide(primitive.point, plane) >= 0) front++;
-        else back++;
-        continue;
-      }
+      // Points are never split by a plane - they're just classified to one
+      // side, at the same O(1) cost regardless of which side they land on -
+      // so they add no splitting cost either way and shouldn't sway which
+      // splitter looks "balanced". Weighing them here made the choice of
+      // splitter (and thus how unrelated static geometry gets cut) flicker
+      // between frames whenever an animated Point primitive moved.
+      if (primitive.type === "Point") continue;
 
       foldSide(classifySideOnly(primitive.points, plane), {
         front: () => front++,
