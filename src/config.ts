@@ -10,7 +10,7 @@ export const options: SeriFormOptions = { query: location.search };
 export const config = createParsers({
   scene: selectParser({
     label: "Scene",
-    options: ["Spinning Cube"],
+    options: ["Spinning Cube", "Living Room", "Stress Test"],
     default: "Spinning Cube",
   }),
   fov: rangeParser({
