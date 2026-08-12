@@ -1,5 +1,6 @@
 import { isFunction } from "deep-guards";
 import { checkExhausted, tuple } from "niall-utils/core";
+import { Vector } from "vectyped";
 
 import { optSetFill, optSetStroke } from "./helpers";
 import { projectPrimitive, type ProjectOptions } from "./project";
@@ -8,10 +9,11 @@ import type {
   ProjectedPoint,
   ProjectedPolygon,
   ProjectedPrimitive,
+  ProjectedSplittablePrimitive,
   SplitStyleArg,
 } from "./types";
 
-function splitStyleArg<Projected extends ProjectedLine | ProjectedPolygon>(
+function splitStyleArg<Projected extends ProjectedSplittablePrimitive>(
   projected: Projected,
   projectOptions: ProjectOptions
 ): SplitStyleArg<Projected> {
@@ -74,6 +76,62 @@ function renderLine(
   ctx.stroke();
 }
 
+// Canvas computes each fill's anti-aliased coverage independently, with no
+// awareness of neighbouring shapes - so two polygons sharing an edge (e.g.
+// adjacent BSP fragments of one original) can each award that shared
+// boundary only partial coverage. Since neither fully covers it, the two
+// partial-coverage draws compound to *less* than full opacity there,
+// leaving a visibly darker seam even when both polygons are the exact
+// same colour - a plain matching-colour stroke doesn't fix this, since
+// its own outer edge has the identical "only partial coverage on this
+// side" problem.
+//
+// This instead borrows the "fill convention" GPU rasterisers use to make
+// adjacent triangles tile without gaps or double-coverage: extend an edge
+// outward by a pixel only if its outward normal points generally
+// down-right. A shared edge's outward normal points in exactly opposite
+// directions for its two owning polygons, so this rule always picks
+// exactly one owner to extend past the boundary - giving full, opaque
+// coverage right up to (and a hair past) the seam, with no partial
+// coverage left for anything to compound with.
+const EDGE_EXTEND_PX = 1;
+
+function outwardNormal(
+  from: Vector<2>,
+  to: Vector<2>,
+  centroid: Vector<2>
+): Vector<2> {
+  const dir = to.copy().sub(from);
+  const candidate = Vector.create(-dir.y(), dir.x());
+  const midpoint = from.copy().add(to).divide(2);
+  const pointsOutward = candidate.dot(midpoint.copy().sub(centroid)) >= 0;
+  return (pointsOutward ? candidate : candidate.copy().multiply(-1)).getNorm();
+}
+
+function extendBottomRightEdges(points: Vector<2>[]): Vector<2>[] {
+  const n = points.length;
+  const centroid = points
+    .reduce((sum, point) => sum.add(point), Vector.zero(2))
+    .divide(n);
+
+  return points.map((point, i) => {
+    const prev = points[(i - 1 + n) % n] as Vector<2>;
+    const next = points[(i + 1) % n] as Vector<2>;
+    const offset = Vector.zero(2);
+
+    const prevNormal = outwardNormal(prev, point, centroid);
+    if (prevNormal.x() + prevNormal.y() > 0) {
+      offset.add(prevNormal.copy().multiply(EDGE_EXTEND_PX));
+    }
+    const nextNormal = outwardNormal(point, next, centroid);
+    if (nextNormal.x() + nextNormal.y() > 0) {
+      offset.add(nextNormal.copy().multiply(EDGE_EXTEND_PX));
+    }
+
+    return point.copy().add(offset);
+  });
+}
+
 function renderPolygon(
   ctx: CanvasRenderingContext2D,
   polygon: ProjectedPolygon,
@@ -83,19 +141,13 @@ function renderPolygon(
     tuple(splitStyleArg(polygon, projectOptions), ctx)
   );
   ctx.beginPath();
-  for (const [i, projected] of polygon.projected.entries()) {
+  for (const [i, projected] of extendBottomRightEdges(
+    polygon.projected
+  ).entries()) {
     ctx[i === 0 ? "moveTo" : "lineTo"](...projected.toArray());
   }
   ctx.closePath();
   ctx.fill();
-  // Two polygons that exactly share an edge (e.g. a flat surface the BSP
-  // tree cut into pieces) are filled independently, so each anti-aliases
-  // its own edge - that can leave a hairline gap of background showing
-  // through where they meet. Stroking the same fill colour over the edge
-  // "caulks" that gap without visibly thickening solid interior edges.
-  ctx.strokeStyle = ctx.fillStyle;
-  ctx.lineWidth = 1;
-  ctx.stroke();
 }
 
 export function renderPrimitive(

@@ -90,8 +90,18 @@ describe("prepareScene", () => {
 
     const scene = prepareScene([a, b]);
 
-    expect(scene.tree).toEqual({ type: "leaf", primitives: [a, b] });
+    expect(scene.tree).toEqual({ type: "leaf", primitives: [] });
     expect(scene.bvh.type).toBe("leaf");
+  });
+
+  it("keeps Points out of the BSP tree/BVH entirely, surfacing them via the `points` field instead", () => {
+    const point = createPoint({ point: vec3(0, 0, 0) });
+    const line = createLine({ points: [vec3(5, 5, 5), vec3(6, 6, 6)] });
+
+    const scene = prepareScene([point, line]);
+
+    expect(scene.points).toEqual([point]);
+    expect(scene.tree).toEqual({ type: "leaf", primitives: [line] });
   });
 
   it("resolves intersections before building the trees, so crossing lines are split", () => {
@@ -139,9 +149,56 @@ describe("renderPrepared", () => {
     const farScreen = project(far.points[0], projectOptions);
     const nearScreen = project(near.points[0], projectOptions);
 
+    // renderPolygon nudges bottom/right-facing edges outward by up to ~1.4px
+    // (see extendBottomRightEdges) to close seams between adjacent fills, so
+    // the raw projected vertex is only approximately where moveTo lands.
+    const closeTo = ([x, y]: [number, number], target: Vector<2>): boolean =>
+      Math.hypot(x - target.x(), y - target.y()) < 2;
+
     expect(moveTo).toHaveBeenCalledTimes(2);
-    expect(moveTo.mock.calls[0]).toEqual([farScreen.x(), farScreen.y()]);
-    expect(moveTo.mock.calls[1]).toEqual([nearScreen.x(), nearScreen.y()]);
+    expect(closeTo(moveTo.mock.calls[0] as [number, number], farScreen)).toBe(
+      true
+    );
+    expect(closeTo(moveTo.mock.calls[1] as [number, number], nearScreen)).toBe(
+      true
+    );
+  });
+
+  it("orders Points strictly by real camera distance, not by scene insertion order (a scene with no polygons puts every Point in a single BSP leaf, unsplit and unsorted)", () => {
+    const { ctx, arc } = fakeCtx();
+    const near = createPoint({ point: vec3(0, 0, 5), radius: 1 });
+    const mid = createPoint({ point: vec3(0, 0, 12), radius: 2 });
+    const far = createPoint({ point: vec3(0, 0, 20), radius: 3 });
+
+    // Deliberately scrambled relative to distance order: if Points were
+    // ever drawn in scene/leaf insertion order instead of by real
+    // distance, this would draw them in the wrong sequence.
+    const scene = prepareScene([mid, far, near]);
+    renderPrepared(scene, projectOptions, { ctx });
+
+    const radiiInDrawOrder = arc.mock.calls.map(call => call[2] as number);
+    expect(radiiInDrawOrder).toEqual([3, 2, 1]);
+  });
+
+  it("interleaves a Point at its correct position among BSP-ordered polygons by real distance", () => {
+    const { ctx, moveTo, arc } = fakeCtx();
+    const near = createPolygon({
+      points: [vec3(-2, -0.5, 5), vec3(-1, -0.5, 5), vec3(-1.5, 0.5, 5)],
+    });
+    const far = createPolygon({
+      points: [vec3(5, -0.5, 20), vec3(6, -0.5, 20), vec3(5.5, 0.5, 20)],
+    });
+    const mid = createPoint({ point: vec3(0, 0, 12) });
+
+    const scene = prepareScene([mid, near, far]);
+    renderPrepared(scene, projectOptions, { ctx });
+
+    const farMoveOrder = moveTo.mock.invocationCallOrder[0];
+    const midArcOrder = arc.mock.invocationCallOrder[0];
+    const nearMoveOrder = moveTo.mock.invocationCallOrder[1];
+
+    expect(farMoveOrder).toBeLessThan(midArcOrder);
+    expect(midArcOrder).toBeLessThan(nearMoveOrder);
   });
 
   it("still renders both pieces of a polygon the BSP tree had to split, instead of dropping them from the frustum-visibility check", () => {

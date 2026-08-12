@@ -14,13 +14,19 @@ import {
   createPoint,
   type AABB,
   type BVHNode,
-  type Primitive2D,
+  type SplittablePrimitive,
 } from "./types";
 
 const vec3 = (x: number, y: number, z: number): Vector<3> =>
   Vector.create(x, y, z);
 
-function flattenLeaves(node: BVHNode): Primitive2D[] {
+// A zero-extent stand-in for a Point, for tests that just need many small
+// SplittablePrimitives to exercise the BVH's generic bounds/tree behaviour -
+// buildBVH no longer accepts Points directly (see PreparedScene.points).
+const dot = (p: Vector<3>): SplittablePrimitive =>
+  createLine({ points: [p, p] });
+
+function flattenLeaves(node: BVHNode): SplittablePrimitive[] {
   return node.type === "leaf"
     ? node.primitives
     : [...flattenLeaves(node.left), ...flattenLeaves(node.right)];
@@ -55,16 +61,14 @@ describe("buildBVH", () => {
   });
 
   it("returns a single leaf for a scene at or below the leaf size", () => {
-    const points = [vec3(0, 0, 0), vec3(1, 1, 1), vec3(2, 2, 2)].map(p =>
-      createPoint({ point: p })
-    );
+    const points = [vec3(0, 0, 0), vec3(1, 1, 1), vec3(2, 2, 2)].map(dot);
     const tree = buildBVH(points);
     expect(tree.type).toBe("leaf");
   });
 
   it("branches for a scene larger than the leaf size, preserving every primitive", () => {
     const points = Array.from({ length: 20 }, (_, i) =>
-      createPoint({ point: vec3(i * 10, 0, 0) })
+      dot(vec3(i * 10, 0, 0))
     );
     const tree = buildBVH(points);
 
@@ -76,7 +80,7 @@ describe("buildBVH", () => {
 
   it("gives every node bounds that contain all of its descendants", () => {
     const points = Array.from({ length: 20 }, (_, i) =>
-      createPoint({ point: vec3(i * 10, i % 3, -i) })
+      dot(vec3(i * 10, i % 3, -i))
     );
     const tree = buildBVH(points);
 
@@ -108,13 +112,13 @@ describe("buildFrustumPlanes + queryFrustum", () => {
   };
 
   it("keeps a point straight ahead and drops one behind the camera", () => {
-    const ahead = createPoint({ point: vec3(0, 0, 10) });
+    const ahead = dot(vec3(0, 0, 10));
     const aheadFiller = Array.from({ length: 5 }, (_, i) =>
-      createPoint({ point: vec3(i, 0, 11) })
+      dot(vec3(i, 0, 11))
     );
-    const behind = createPoint({ point: vec3(0, 0, -10) });
+    const behind = dot(vec3(0, 0, -10));
     const behindFiller = Array.from({ length: 5 }, (_, i) =>
-      createPoint({ point: vec3(i, 0, -11) })
+      dot(vec3(i, 0, -11))
     );
     const bvh = buildBVH([ahead, ...aheadFiller, behind, ...behindFiller]);
 
@@ -125,13 +129,13 @@ describe("buildFrustumPlanes + queryFrustum", () => {
 
   it("keeps a point within the lateral field of view and drops one outside it", () => {
     const aspectRatio = 800 / 600;
-    const inside = createPoint({ point: vec3(0.4 * aspectRatio * 10, 0, 10) });
+    const inside = dot(vec3(0.4 * aspectRatio * 10, 0, 10));
     const insideFiller = Array.from({ length: 5 }, (_, i) =>
-      createPoint({ point: vec3(0.4 * aspectRatio * 10, 0, 10 + i * 0.1) })
+      dot(vec3(0.4 * aspectRatio * 10, 0, 10 + i * 0.1))
     );
-    const outside = createPoint({ point: vec3(0.6 * aspectRatio * 10, 0, 10) });
+    const outside = dot(vec3(0.6 * aspectRatio * 10, 0, 10));
     const outsideFiller = Array.from({ length: 5 }, (_, i) =>
-      createPoint({ point: vec3(0.6 * aspectRatio * 10, 0, 10 + i * 0.1) })
+      dot(vec3(0.6 * aspectRatio * 10, 0, 10 + i * 0.1))
     );
     const bvh = buildBVH([inside, ...insideFiller, outside, ...outsideFiller]);
 
@@ -142,10 +146,10 @@ describe("buildFrustumPlanes + queryFrustum", () => {
 
   it("prunes an entire cluster whose bounds are fully outside the frustum", () => {
     const nearCluster = Array.from({ length: 6 }, (_, i) =>
-      createPoint({ point: vec3(i, 0, 10) })
+      dot(vec3(i, 0, 10))
     );
     const behindCluster = Array.from({ length: 6 }, (_, i) =>
-      createPoint({ point: vec3(i, 0, -10) })
+      dot(vec3(i, 0, -10))
     );
     const bvh = buildBVH([...nearCluster, ...behindCluster]);
 
@@ -159,13 +163,13 @@ describe("queryOverlapping", () => {
   it("returns only primitives whose bounds overlap the target box", () => {
     const near = createLine({ points: [vec3(0, 0, 0), vec3(1, 1, 1)] });
     const nearFiller = Array.from({ length: 5 }, (_, i) =>
-      createPoint({ point: vec3(0, 0, i * 0.1) })
+      dot(vec3(0, 0, i * 0.1))
     );
     const far = createLine({
       points: [vec3(100, 100, 100), vec3(101, 101, 101)],
     });
     const farFiller = Array.from({ length: 5 }, (_, i) =>
-      createPoint({ point: vec3(100, 100, 100 + i * 0.1) })
+      dot(vec3(100, 100, 100 + i * 0.1))
     );
     const bvh = buildBVH([near, ...nearFiller, far, ...farFiller]);
 
@@ -177,11 +181,9 @@ describe("queryOverlapping", () => {
   });
 
   it("prunes whole subtrees whose combined bounds don't overlap", () => {
-    const cluster = Array.from({ length: 6 }, (_, i) =>
-      createPoint({ point: vec3(i, 0, 0) })
-    );
+    const cluster = Array.from({ length: 6 }, (_, i) => dot(vec3(i, 0, 0)));
     const farCluster = Array.from({ length: 6 }, (_, i) =>
-      createPoint({ point: vec3(1000 + i, 0, 0) })
+      dot(vec3(1000 + i, 0, 0))
     );
     const bvh = buildBVH([...cluster, ...farCluster]);
 

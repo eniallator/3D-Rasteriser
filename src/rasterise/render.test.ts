@@ -184,7 +184,7 @@ describe("renderPrimitive - Line", () => {
 });
 
 describe("renderPrimitive - Polygon", () => {
-  it("moves to the first point, lines to the rest, and fills", () => {
+  it("moves to the first point, lines to the rest (extending bottom/right-facing edges by 1px to close seams between adjacent fills), and fills", () => {
     const { ctx, beginPath, moveTo, lineTo, fill } = fakeCtx();
     const polygon = createPolygon({
       points: [
@@ -206,10 +206,60 @@ describe("renderPrimitive - Polygon", () => {
     renderPrimitive(ctx, projected, projectOptions);
 
     expect(beginPath).toHaveBeenCalledOnce();
+    // The right-angle vertex (0,0) touches only the two edges running
+    // along the axes - neither faces down-right - so it's untouched. The
+    // hypotenuse (10,0)->(0,10) is the only down-right-facing edge, so
+    // both its endpoints get nudged 1px outward along its outward normal.
     expect(moveTo).toHaveBeenCalledWith(0, 0);
-    expect(lineTo).toHaveBeenCalledWith(10, 0);
-    expect(lineTo).toHaveBeenCalledWith(0, 10);
+    const shift = 1 / Math.sqrt(2);
+    const [first, second] = lineTo.mock.calls as [number, number][];
+    expect(first[0]).toBeCloseTo(10 + shift);
+    expect(first[1]).toBeCloseTo(shift);
+    expect(second[0]).toBeCloseTo(shift);
+    expect(second[1]).toBeCloseTo(10 + shift);
     expect(fill).toHaveBeenCalledOnce();
+  });
+
+  it("extends only a square's bottom and right edges by 1px, leaving its top and left edges untouched", () => {
+    const { ctx, moveTo, lineTo } = fakeCtx();
+    const polygon = createPolygon({
+      points: [
+        Vector.create(0, 0, 0),
+        Vector.create(1, 0, 0),
+        Vector.create(1, 1, 0),
+        Vector.create(0, 1, 0),
+      ],
+    });
+    const projected: ProjectedPolygon = {
+      type: "Polygon",
+      primitive: polygon,
+      // Clockwise in screen space (y grows downward): top edge, right
+      // edge, bottom edge, left edge.
+      projected: [
+        Vector.create(0, 0),
+        Vector.create(10, 0),
+        Vector.create(10, 10),
+        Vector.create(0, 10),
+      ],
+    };
+
+    renderPrimitive(ctx, projected, projectOptions);
+
+    // Top-left corner: neither adjacent edge (top, left) extends.
+    expect(moveTo).toHaveBeenCalledWith(0, 0);
+    const [topRight, bottomRight, bottomLeft] = lineTo.mock.calls as [
+      number,
+      number,
+    ][];
+    // Top-right corner: only the right edge extends.
+    expect(topRight[0]).toBeCloseTo(11);
+    expect(topRight[1]).toBeCloseTo(0);
+    // Bottom-right corner: both the right and bottom edges extend.
+    expect(bottomRight[0]).toBeCloseTo(11);
+    expect(bottomRight[1]).toBeCloseTo(11);
+    // Bottom-left corner: only the bottom edge extends.
+    expect(bottomLeft[0]).toBeCloseTo(0);
+    expect(bottomLeft[1]).toBeCloseTo(11);
   });
 
   it("calls a style function with {original: self} when the polygon was never split", () => {
@@ -288,7 +338,7 @@ describe("renderPrimitive - Polygon", () => {
     );
   });
 
-  it("closes the path and strokes it in the same colour as the fill, to hide anti-aliasing seams between abutting polygons", () => {
+  it("closes the path and fills, without stroking the outline", () => {
     const { ctx, closePath, fill, stroke } = fakeCtx();
     const polygon = createPolygon({
       points: [
@@ -311,10 +361,7 @@ describe("renderPrimitive - Polygon", () => {
     renderPrimitive(ctx, projected, projectOptions);
 
     expect(closePath).toHaveBeenCalledOnce();
-    expect(fill.mock.invocationCallOrder[0]).toBeLessThan(
-      stroke.mock.invocationCallOrder[0]
-    );
-    expect(stroke).toHaveBeenCalledOnce();
-    expect(ctx.strokeStyle).toBe("orange");
+    expect(fill).toHaveBeenCalledOnce();
+    expect(stroke).not.toHaveBeenCalled();
   });
 });

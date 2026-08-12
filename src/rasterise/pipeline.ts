@@ -1,7 +1,7 @@
 import { tuple } from "niall-utils/core";
 import { mapFilter } from "niall-utils/functional";
 
-import { buildBSPTree, traverseBackToFront } from "./bsp";
+import { buildBSPTree } from "./bsp";
 import {
   aabbInFrustum,
   buildBVH,
@@ -12,9 +12,16 @@ import {
 import { clipPrimitivesToCamera, isPrimitiveOnScreen } from "./clip";
 import { findSqrDist } from "./helpers";
 import { resolveIntersections } from "./intersect";
+import { mergePointsByDistance } from "./merge";
 import { projectPrimitive, type ProjectOptions } from "./project";
 import { renderPrimitive } from "./render";
-import type { PreparedScene, Primitive1D, Primitive2D } from "./types";
+import type {
+  Point,
+  PreparedScene,
+  Primitive1D,
+  Primitive2D,
+  SplittablePrimitive,
+} from "./types";
 
 interface RenderOptions {
   ctx: CanvasRenderingContext2D;
@@ -51,11 +58,16 @@ export function prepareScene(
   primitives: readonly Primitive2D[]
 ): PreparedScene {
   const resolved = resolveIntersections(primitives);
-  return { tree: buildBSPTree(resolved), bvh: buildBVH(resolved) };
+  // Points never enter the BSP tree/BVH - see PreparedScene's `points` field.
+  const points = resolved.filter((p): p is Point => p.type === "Point");
+  const shapes = resolved.filter(
+    (p): p is SplittablePrimitive => p.type !== "Point"
+  );
+  return { tree: buildBSPTree(shapes), bvh: buildBVH(shapes), points };
 }
 
 export function renderPrepared(
-  { tree, bvh }: PreparedScene,
+  { tree, bvh, points }: PreparedScene,
   projectOptions: ProjectOptions,
   { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
@@ -64,15 +76,22 @@ export function renderPrepared(
   // not the ones the BVH indexed, so a reference-based Set lookup would drop
   // them; fall back to a direct bounds check for anything the Set misses.
   const visible = new Set(queryFrustum(bvh, frustumPlanes));
+  const visiblePoints = points.filter(point =>
+    aabbInFrustum(primitiveBounds(point), frustumPlanes)
+  );
 
-  clipPrimitivesToCamera(
-    traverseBackToFront(tree, projectOptions.viewPos).filter(
-      primitive =>
-        visible.has(primitive) ||
-        aabbInFrustum(primitiveBounds(primitive), frustumPlanes)
-    ),
-    projectOptions
-  )
+  const merged = mergePointsByDistance(
+    tree,
+    visiblePoints,
+    projectOptions.viewPos
+  ).filter(
+    primitive =>
+      primitive.type === "Point" ||
+      visible.has(primitive) ||
+      aabbInFrustum(primitiveBounds(primitive), frustumPlanes)
+  );
+
+  clipPrimitivesToCamera(merged, projectOptions)
     .map(primitive => projectPrimitive(primitive, projectOptions))
     .filter(projected =>
       isPrimitiveOnScreen(projected, projectOptions.screenDim)

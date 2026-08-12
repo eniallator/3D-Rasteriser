@@ -14,6 +14,7 @@ import {
   type Plane,
   type Polygon,
   type Primitive2D,
+  type SplittablePrimitive,
 } from "./types";
 
 function segment2DIntersection(
@@ -106,7 +107,7 @@ function cutLineAt(line: Line, index: number, t: number): [Line, Line] {
   ];
 }
 
-function isPointInPolygon(
+export function isPointInPolygon(
   point: Vector<3>,
   polygon: Polygon,
   plane: Plane
@@ -196,7 +197,7 @@ export function cutPolygonSignedDistances(
       currentPoints = [pointOnPlane];
     }
   }
-  polygons[0]?.points.push(...currentPoints);
+  polygons[0]?.points.unshift(...currentPoints);
 
   return polygons;
 }
@@ -218,26 +219,27 @@ export function resolveIntersections(
   const initial = primitives.filter(p => p.type !== "Point");
   const bvh = buildBVH(initial);
 
-  const removed = new Set<Line | Polygon>();
-  const replacedBy = new Map<Line | Polygon, (Line | Polygon)[]>();
-  const resolveCurrent = (primitive: Line | Polygon): (Line | Polygon)[] => {
+  const removed = new Set<SplittablePrimitive>();
+  const replacedBy = new Map<SplittablePrimitive, SplittablePrimitive[]>();
+  const resolveCurrent = (
+    primitive: SplittablePrimitive
+  ): SplittablePrimitive[] => {
     const replacement = replacedBy.get(primitive);
     return replacement == null
       ? [primitive]
       : replacement.flatMap(resolveCurrent);
   };
 
-  const working: (Line | Polygon)[] = [...initial];
+  const working: SplittablePrimitive[] = [...initial];
 
   for (let i = 0; i < working.length; i++) {
-    const currPrimitive = working.at(i) as Line | Polygon;
+    const currPrimitive = working.at(i) as SplittablePrimitive;
     if (removed.has(currPrimitive)) continue;
 
     const candidates = queryOverlapping(bvh, primitiveBounds(currPrimitive));
 
     for (const rawCandidate of candidates) {
       if (removed.has(currPrimitive)) break;
-      if (rawCandidate.type === "Point") continue;
 
       for (const otherPrimitive of resolveCurrent(rawCandidate)) {
         if (removed.has(currPrimitive)) break;

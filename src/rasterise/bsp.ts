@@ -9,7 +9,7 @@ import {
   type Line,
   type Plane,
   type Polygon,
-  type Primitive2D,
+  type SplittablePrimitive,
 } from "./types";
 
 type Side = "front" | "back" | "coplanar" | "straddling";
@@ -141,12 +141,12 @@ export function sampleIndices(poolSize: number, count: number): number[] {
   );
 }
 
-type PrimitiveEntry = [number, Primitive2D];
+type PrimitiveEntry = [number, SplittablePrimitive];
 type PolygonEntry = [number, Polygon];
 
 function pickBestSplitter(
   candidateEntries: PolygonEntry[],
-  primitives: Primitive2D[]
+  primitives: SplittablePrimitive[]
 ): PolygonEntry {
   const sampled = sampleIndices(
     candidateEntries.length,
@@ -164,14 +164,6 @@ function pickBestSplitter(
 
     for (const primitive of primitives) {
       if (primitive === candidate) continue;
-
-      // Points are never split by a plane - they're just classified to one
-      // side, at the same O(1) cost regardless of which side they land on -
-      // so they add no splitting cost either way and shouldn't sway which
-      // splitter looks "balanced". Weighing them here made the choice of
-      // splitter (and thus how unrelated static geometry gets cut) flicker
-      // between frames whenever an animated Point primitive moved.
-      if (primitive.type === "Point") continue;
 
       foldSide(classifySideOnly(primitive.points, plane), {
         front: () => front++,
@@ -219,13 +211,6 @@ function buildBSPTreeEntries(primitiveEntries: PrimitiveEntry[]): BSPNode {
     if (primitive === splitter) continue;
 
     switch (primitive.type) {
-      case "Point": {
-        const side = planeSide(primitive.point, plane);
-        (side >= 0 ? frontEntries : backEntries).push(
-          tuple(originalIndex, primitive)
-        );
-        break;
-      }
       case "Line": {
         const { side, distances } = classifyPoints(primitive.points, plane);
         foldSide(side, {
@@ -278,14 +263,14 @@ function buildBSPTreeEntries(primitiveEntries: PrimitiveEntry[]): BSPNode {
   };
 }
 
-export function buildBSPTree(primitives: Primitive2D[]): BSPNode {
+export function buildBSPTree(primitives: SplittablePrimitive[]): BSPNode {
   return buildBSPTreeEntries(primitives.entries().toArray());
 }
 
 export function traverseBackToFront(
   node: BSPNode,
   viewPos: Vector<3>
-): Primitive2D[] {
+): SplittablePrimitive[] {
   if (node.type === "leaf") return node.primitives;
 
   const eyeSide = planeSide(viewPos, node.plane);

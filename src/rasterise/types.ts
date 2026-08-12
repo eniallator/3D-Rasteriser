@@ -40,12 +40,11 @@ export interface ProjectedPolygon {
   projected: Vector<2>[];
 }
 
-export type ProjectedPrimitive =
-  ProjectedPoint | ProjectedLine | ProjectedPolygon;
+export type ProjectedSplittablePrimitive = ProjectedLine | ProjectedPolygon;
 
-export interface SplitStyleArg<
-  Projected extends ProjectedLine | ProjectedPolygon,
-> {
+export type ProjectedPrimitive = ProjectedPoint | ProjectedSplittablePrimitive;
+
+export interface SplitStyleArg<Projected extends ProjectedSplittablePrimitive> {
   original: Projected;
   fragment?: Projected;
 }
@@ -87,20 +86,35 @@ export interface Polygon {
 export type Primitive1D = Point | Line;
 export type Primitive2D = Primitive1D | Polygon;
 
+/** A Line or a Polygon - the two primitive kinds that can be split by
+ * clipping or BSP splitting (unlike Point, which has no extent to split). */
+export type SplittablePrimitive = Line | Polygon;
+
 export type PrimitiveBTree<BranchMeta, LeafMeta = Record<never, never>> =
   | ({
       type: "branch";
       left: PrimitiveBTree<BranchMeta, LeafMeta>;
       right: PrimitiveBTree<BranchMeta, LeafMeta>;
     } & BranchMeta)
-  | ({ type: "leaf"; primitives: Primitive2D[] } & LeafMeta);
+  | ({ type: "leaf"; primitives: SplittablePrimitive[] } & LeafMeta);
 
-export type BSPNode = PrimitiveBTree<{ plane: Plane; coplanar: Primitive2D[] }>;
+export type BSPNode = PrimitiveBTree<{
+  plane: Plane;
+  coplanar: SplittablePrimitive[];
+}>;
 export type BVHNode = PrimitiveBTree<{ bounds: AABB<3> }, { bounds: AABB<3> }>;
 
 export interface PreparedScene {
   tree: BSPNode;
   bvh: BVHNode;
+  /**
+   * Points never go into the BSP tree - see renderPrepared() for why: a
+   * Point has no extent, so it can't be split, and its correct depth
+   * relationship to nearby geometry is better decided by comparing actual
+   * distance from the camera than by classifying it against whatever plane
+   * a *polygon* happened to be split by nearby.
+   */
+  points: Point[];
 }
 
 export function createPoint(point: Omit<Point, "type">): Point {

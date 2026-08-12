@@ -2,13 +2,7 @@ import { Vector } from "vectyped";
 import { describe, expect, it } from "vitest";
 
 import { buildBSPTree, sampleIndices, traverseBackToFront } from "./bsp";
-import {
-  createLine,
-  createPoint,
-  createPolygon,
-  type BSPNode,
-  type Polygon,
-} from "./types";
+import { createLine, createPolygon, type BSPNode, type Polygon } from "./types";
 
 const vec3 = (x: number, y: number, z: number): Vector<3> =>
   Vector.create(x, y, z);
@@ -38,12 +32,12 @@ function findNodeWithCoplanar(node: BSPNode): BSPNode & { type: "branch" } {
 
 describe("buildBSPTree", () => {
   it("returns a single leaf, unchanged, for a scene with no polygons", () => {
-    const point = createPoint({ point: vec3(0, 0, 0) });
-    const line = createLine({ points: [vec3(0, 0, 0), vec3(1, 1, 1)] });
+    const lineA = createLine({ points: [vec3(0, 0, 0), vec3(1, 1, 1)] });
+    const lineB = createLine({ points: [vec3(2, 2, 2), vec3(3, 3, 3)] });
 
-    const tree = buildBSPTree([point, line]);
+    const tree = buildBSPTree([lineA, lineB]);
 
-    expect(tree).toEqual({ type: "leaf", primitives: [point, line] });
+    expect(tree).toEqual({ type: "leaf", primitives: [lineA, lineB] });
   });
 
   it("splits a straddling Line by the polygon's plane into front/back pieces", () => {
@@ -122,43 +116,6 @@ describe("buildBSPTree", () => {
 
     expect(new Set(outcomes).size).toBe(1);
   });
-
-  it("doesn't let Point primitives sway which polygon is chosen as splitter", () => {
-    const candidateA = createPolygon({
-      points: [vec3(0, -1, -1), vec3(0, 1, -1), vec3(0, 1, 1), vec3(0, -1, 1)],
-      style: "A",
-    });
-    const candidateB = createPolygon({
-      points: [vec3(-1, -1, 0), vec3(1, -1, 0), vec3(1, 1, 0), vec3(-1, 1, 0)],
-      style: "B",
-    });
-    const balancers = [
-      createPolygon({
-        points: [vec3(5, -1, 4), vec3(6, -1, 4), vec3(6, 1, 4), vec3(5, 1, 4)],
-      }),
-      createPolygon({
-        points: [
-          vec3(-6, -1, 3),
-          vec3(-5, -1, 3),
-          vec3(-5, 1, 3),
-          vec3(-6, 1, 3),
-        ],
-      }),
-    ];
-
-    const swayingPoints = Array.from({ length: 20 }, (_, i) =>
-      createPoint({ point: vec3(10, 0, i < 10 ? 10 : -10) })
-    );
-
-    const tree = buildBSPTree([
-      candidateA,
-      candidateB,
-      ...balancers,
-      ...swayingPoints,
-    ]);
-
-    expect(tree.type === "branch" && tree.coplanar[0]?.style).toBe("A");
-  });
 });
 
 describe("sampleIndices", () => {
@@ -198,13 +155,13 @@ describe("traverseBackToFront", () => {
 
   it("flattens the whole tree, losing no primitives, for a non-splitting scene", () => {
     const polys = [square(0, 0, 0), square(10, 0, 5), square(20, 0, 10)];
-    const point = createPoint({ point: vec3(0, 0, 0) });
+    const line = createLine({ points: [vec3(0, 0, 0), vec3(1, 1, 1)] });
 
-    const tree = buildBSPTree([...polys, point]);
+    const tree = buildBSPTree([...polys, line]);
     const flattened = traverseBackToFront(tree, vec3(0, 0, -50));
 
     expect(flattened).toHaveLength(4);
     for (const p of polys) expect(flattened).toContain(p);
-    expect(flattened).toContain(point);
+    expect(flattened).toContain(line);
   });
 });

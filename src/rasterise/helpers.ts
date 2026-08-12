@@ -90,6 +90,19 @@ export function planeSide(point: Vector<3>, plane: Plane): -1 | 0 | 1 {
     : (Math.sign(dist) as -1 | 1);
 }
 
+// The `t` at which the ray `origin + t*dir` crosses `plane` - so `t < 1`
+// means the plane crosses before `origin + dir`, `t > 1` means it crosses
+// beyond it. Null if the ray is parallel to the plane (never crosses it).
+export function rayPlaneIntersectionT(
+  origin: Vector<3>,
+  dir: Vector<3>,
+  plane: Plane
+): number | null {
+  const denom = plane.norm.dot(dir);
+  if (Math.abs(denom) < IMPRECISION_THRESHOLD) return null;
+  return -(plane.norm.dot(origin) + plane.d) / denom;
+}
+
 export function boundsOf<N extends number>(points: Vector<N>[]): AABB<N> {
   const first = points.at(0) as Vector<N>;
   return points.slice(1).reduce(

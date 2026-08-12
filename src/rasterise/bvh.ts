@@ -2,7 +2,13 @@ import { Vector } from "vectyped";
 
 import { boundsOf, boundsOverlap } from "./helpers";
 import { cameraBasis, type ProjectOptions } from "./project";
-import type { AABB, BVHNode, Plane, Primitive2D } from "./types";
+import type {
+  AABB,
+  BVHNode,
+  Plane,
+  Primitive2D,
+  SplittablePrimitive,
+} from "./types";
 
 export const primitiveBounds = (primitive: Primitive2D): AABB<3> =>
   boundsOf(primitive.type === "Point" ? [primitive.point] : primitive.points);
@@ -15,7 +21,7 @@ const mergeBounds = (a: AABB<3>, b: AABB<3>): AABB<3> => ({
 const BVH_LEAF_SIZE = 4;
 
 interface PrimitiveWithBounds {
-  primitive: Primitive2D;
+  primitive: SplittablePrimitive;
   bounds: AABB<3>;
   centroid: Vector<3>;
 }
@@ -52,7 +58,7 @@ function buildBVHNode(items: PrimitiveWithBounds[]): BVHNode {
   };
 }
 
-export function buildBVH(primitives: Primitive2D[]): BVHNode {
+export function buildBVH(primitives: SplittablePrimitive[]): BVHNode {
   if (primitives.length === 0) {
     return {
       type: "leaf",
@@ -139,7 +145,7 @@ export const aabbInFrustum = (
 export function queryFrustum(
   node: BVHNode,
   frustumPlanes: Plane[]
-): Primitive2D[] {
+): SplittablePrimitive[] {
   if (!aabbInFrustum(node.bounds, frustumPlanes)) return [];
   if (node.type === "leaf") return node.primitives;
   return [
@@ -151,7 +157,7 @@ export function queryFrustum(
 export function queryOverlapping(
   node: BVHNode,
   targetBounds: AABB<3>
-): Primitive2D[] {
+): SplittablePrimitive[] {
   if (!boundsOverlap(node.bounds, targetBounds)) return [];
   if (node.type === "leaf") return node.primitives;
   return [
