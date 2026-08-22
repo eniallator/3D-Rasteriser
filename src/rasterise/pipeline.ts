@@ -14,7 +14,7 @@ import { findSqrDist } from "./helpers";
 import { resolveIntersections } from "./intersect";
 import { mergePointsByDistance } from "./merge";
 import { projectPrimitive, type ProjectOptions } from "./project";
-import { renderPrimitive } from "./render";
+import { renderBatchedPrimitives } from "./render";
 import type {
   Point,
   PreparedScene,
@@ -35,7 +35,7 @@ export function naivePipeline(
   projectOptions: ProjectOptions,
   { ctx, defaultFill, defaultStroke, defaultFont }: RenderOptions
 ): void {
-  mapFilter(
+  const toRender = mapFilter(
     clipPrimitivesToCamera(primitives, projectOptions) as Primitive1D[],
     (primitive: Primitive1D) => {
       const projected = projectPrimitive(primitive, projectOptions);
@@ -45,13 +45,13 @@ export function naivePipeline(
     }
   )
     .sort(([a], [b]) => b - a)
-    .forEach(([_, projected]) => {
-      ctx.fillStyle = defaultFill ?? "white";
-      ctx.strokeStyle = defaultStroke ?? "white";
-      ctx.font = defaultFont ?? "inherit";
+    .map(([, projected]) => projected);
 
-      renderPrimitive(ctx, projected, projectOptions);
-    });
+  ctx.fillStyle = defaultFill ?? "white";
+  ctx.strokeStyle = defaultStroke ?? "white";
+  ctx.font = defaultFont ?? "inherit";
+
+  renderBatchedPrimitives(ctx, toRender, projectOptions);
 }
 
 export function prepareScene(
@@ -91,17 +91,17 @@ export function renderPrepared(
       aabbInFrustum(primitiveBounds(primitive), frustumPlanes)
   );
 
-  clipPrimitivesToCamera(merged, projectOptions)
+  const toRender = clipPrimitivesToCamera(merged, projectOptions)
     .map(primitive => projectPrimitive(primitive, projectOptions))
     .filter(projected =>
       isPrimitiveOnScreen(projected, projectOptions.screenDim)
-    )
-    .forEach(projected => {
-      ctx.fillStyle = defaultFill ?? "white";
-      ctx.strokeStyle = defaultStroke ?? "white";
-      ctx.font = defaultFont ?? "inherit";
-      renderPrimitive(ctx, projected, projectOptions);
-    });
+    );
+
+  ctx.fillStyle = defaultFill ?? "white";
+  ctx.strokeStyle = defaultStroke ?? "white";
+  ctx.font = defaultFont ?? "inherit";
+
+  renderBatchedPrimitives(ctx, toRender, projectOptions);
 }
 
 export function fullPipeline(

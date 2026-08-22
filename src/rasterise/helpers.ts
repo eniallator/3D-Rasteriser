@@ -2,28 +2,15 @@ import { isFunction } from "deep-guards";
 import { checkExhausted } from "niall-utils/core";
 import { Vector } from "vectyped";
 
-import type { AABB, FillStyle, Plane, Primitive2D, StrokeStyle } from "./types";
+import type { AABB, Plane, Primitive2D } from "./types";
 
 export const IMPRECISION_THRESHOLD = 1e-5;
 
-export function optSetStroke<A extends readonly unknown[]>(
-  ctx: CanvasRenderingContext2D,
-  style: StrokeStyle<A> | undefined,
+export function resolveOptRunnable<A extends readonly unknown[], R>(
+  value: R | ((...args: A) => R) | undefined,
   getArgs: () => A
-): void {
-  if (style != null) {
-    ctx.strokeStyle = isFunction(style) ? style(...getArgs()) : style;
-  }
-}
-
-export function optSetFill<A extends readonly unknown[]>(
-  ctx: CanvasRenderingContext2D,
-  style: FillStyle<A> | undefined,
-  getArgs: () => A
-): void {
-  if (style != null) {
-    ctx.fillStyle = isFunction(style) ? style(...getArgs()) : style;
-  }
+): R | undefined {
+  return isFunction(value) ? value(...getArgs()) : value;
 }
 
 export function findSqrDist(

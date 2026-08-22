@@ -1,10 +1,10 @@
-import { isFunction } from "deep-guards";
 import { checkExhausted, tuple } from "niall-utils/core";
 import { Vector } from "vectyped";
 
-import { optSetFill, optSetStroke } from "./helpers";
+import { boundsOf, boundsOverlap, resolveOptRunnable } from "./helpers";
 import { projectPrimitive, type ProjectOptions } from "./project";
 import type {
+  AABB,
   ProjectedLine,
   ProjectedPoint,
   ProjectedPolygon,
@@ -26,54 +26,10 @@ function splitStyleArg<Projected extends ProjectedSplittablePrimitive>(
       };
 }
 
-function renderPoint(
-  ctx: CanvasRenderingContext2D,
-  point: ProjectedPoint
-): void {
-  optSetFill(ctx, point.primitive.style, () => tuple(point, ctx));
-  ctx.beginPath();
-  ctx.arc(
-    ...point.projected.toArray(),
-    point.primitive.radius ?? 1,
-    0,
-    2 * Math.PI
-  );
-  ctx.fill();
-  const { label } = point.primitive;
-  if (label != null) {
-    if (label.font != null) {
-      ctx.font = isFunction(label.font) ? label.font(point, ctx) : label.font;
-    }
-    optSetFill(ctx, label.style, () => tuple(point, ctx));
-    const textWidth = ctx.measureText(label.text).width;
-    ctx.fillText(
-      label.text,
-      point.projected.x() -
-        (label.maxWidth != null
-          ? Math.min(textWidth, label.maxWidth) / 2
-          : textWidth / 2),
-      point.projected.y(),
-      label.maxWidth
-    );
-  }
-}
-
-function renderLine(
-  ctx: CanvasRenderingContext2D,
-  line: ProjectedLine,
-  projectOptions: ProjectOptions
-): void {
-  if (line.primitive.width != null) {
-    ctx.lineWidth = line.primitive.width;
-  }
-  optSetStroke(ctx, line.primitive.style, () =>
-    tuple(splitStyleArg(line, projectOptions), ctx)
-  );
-  ctx.beginPath();
-  for (const [i, projected] of line.projected.entries()) {
+function addSubpath(ctx: CanvasRenderingContext2D, points: Vector<2>[]): void {
+  for (const [i, projected] of points.entries()) {
     ctx[i === 0 ? "moveTo" : "lineTo"](...projected.toArray());
   }
-  ctx.stroke();
 }
 
 // Canvas computes each fill's anti-aliased coverage independently, with no
@@ -102,10 +58,10 @@ function outwardNormal(
   centroid: Vector<2>
 ): Vector<2> {
   const dir = to.copy().sub(from);
-  const candidate = Vector.create(-dir.y(), dir.x());
+  const normAxis = Vector.create(-dir.y(), dir.x());
   const midpoint = from.copy().add(to).divide(2);
-  const pointsOutward = candidate.dot(midpoint.copy().sub(centroid)) >= 0;
-  return (pointsOutward ? candidate : candidate.copy().multiply(-1)).getNorm();
+  const pointsOutward = normAxis.dot(midpoint.copy().sub(centroid)) >= 0;
+  return (pointsOutward ? normAxis : normAxis.copy().multiply(-1)).getNorm();
 }
 
 function extendBottomRightEdges(points: Vector<2>[]): Vector<2>[] {
@@ -132,40 +88,241 @@ function extendBottomRightEdges(points: Vector<2>[]): Vector<2>[] {
   });
 }
 
-function renderPolygon(
-  ctx: CanvasRenderingContext2D,
-  polygon: ProjectedPolygon,
-  projectOptions: ProjectOptions
-): void {
-  optSetFill(ctx, polygon.primitive.style, () =>
-    tuple(splitStyleArg(polygon, projectOptions), ctx)
-  );
-  ctx.beginPath();
-  for (const [i, projected] of extendBottomRightEdges(
-    polygon.projected
-  ).entries()) {
-    ctx[i === 0 ? "moveTo" : "lineTo"](...projected.toArray());
+type FillSegment =
+  | { kind: "polygon"; points: Vector<2>[] }
+  | { kind: "arc"; center: Vector<2>; radius: number };
+
+interface FillOp {
+  op: "fill";
+  style: CanvasFillStrokeStyles["fillStyle"] | undefined;
+  segment: FillSegment;
+  bounds: AABB<2>;
+}
+
+interface StrokeOp {
+  op: "stroke";
+  style: CanvasFillStrokeStyles["strokeStyle"] | undefined;
+  width: number | undefined;
+  points: Vector<2>[];
+}
+
+interface FillTextOp {
+  op: "fillText";
+  style: CanvasFillStrokeStyles["fillStyle"] | undefined;
+  font: string | undefined;
+  text: string;
+  x: number;
+  y: number;
+  maxWidth: number | undefined;
+}
+
+export type DrawOp = FillOp | StrokeOp | FillTextOp;
+
+function arcBounds(center: Vector<2>, radius: number): AABB<2> {
+  const r = Vector.fill(2, radius);
+  return { min: center.copy().sub(r), max: center.copy().add(r) };
+}
+
+function pointOps(
+  point: ProjectedPoint,
+  ctx: CanvasRenderingContext2D
+): DrawOp[] {
+  const radius = point.primitive.radius ?? 1;
+  const ops: DrawOp[] = [
+    {
+      op: "fill",
+      style: resolveOptRunnable(point.primitive.style, () => tuple(point, ctx)),
+      segment: { kind: "arc", center: point.projected, radius },
+      bounds: arcBounds(point.projected, radius),
+    },
+  ];
+
+  const { label } = point.primitive;
+  if (label != null) {
+    const font = resolveOptRunnable(label.font, () => tuple(point, ctx));
+    if (font != null) ctx.font = font;
+    const textWidth = ctx.measureText(label.text).width;
+    ops.push({
+      op: "fillText",
+      font,
+      style: resolveOptRunnable(label.style, () => tuple(point, ctx)),
+      text: label.text,
+      x:
+        point.projected.x() -
+        (label.maxWidth != null
+          ? Math.min(textWidth, label.maxWidth) / 2
+          : textWidth / 2),
+      y: point.projected.y(),
+      maxWidth: label.maxWidth,
+    });
   }
-  ctx.closePath();
+
+  return ops;
+}
+
+function lineOp(
+  line: ProjectedLine,
+  projectOptions: ProjectOptions,
+  ctx: CanvasRenderingContext2D
+): DrawOp {
+  return {
+    op: "stroke",
+    style: resolveOptRunnable(line.primitive.style, () =>
+      tuple(splitStyleArg(line, projectOptions), ctx)
+    ),
+    width: line.primitive.width,
+    points: line.projected,
+  };
+}
+
+function polygonOp(
+  polygon: ProjectedPolygon,
+  projectOptions: ProjectOptions,
+  ctx: CanvasRenderingContext2D
+): DrawOp {
+  const points = extendBottomRightEdges(polygon.projected);
+  return {
+    op: "fill",
+    style: resolveOptRunnable(polygon.primitive.style, () =>
+      tuple(splitStyleArg(polygon, projectOptions), ctx)
+    ),
+    segment: { kind: "polygon", points },
+    bounds: boundsOf(points),
+  };
+}
+
+export function toDrawOps(
+  primitive: ProjectedPrimitive,
+  projectOptions: ProjectOptions,
+  ctx: CanvasRenderingContext2D
+): DrawOp[] {
+  switch (primitive.type) {
+    case "Point":
+      return pointOps(primitive, ctx);
+    case "Line":
+      return [lineOp(primitive, projectOptions, ctx)];
+    case "Polygon":
+      return [polygonOp(primitive, projectOptions, ctx)];
+    default:
+      return checkExhausted(primitive);
+  }
+}
+
+function addFillSegment(
+  ctx: CanvasRenderingContext2D,
+  segment: FillSegment
+): void {
+  switch (segment.kind) {
+    case "polygon":
+      addSubpath(ctx, segment.points);
+      ctx.closePath();
+      break;
+
+    case "arc":
+      ctx.moveTo(segment.center.x() + segment.radius, segment.center.y());
+      ctx.arc(
+        segment.center.x(),
+        segment.center.y(),
+        segment.radius,
+        0,
+        2 * Math.PI
+      );
+      break;
+
+    default:
+      return checkExhausted(segment);
+  }
+}
+
+function flushFill(ctx: CanvasRenderingContext2D, batch: FillOp[]): void {
+  ctx.beginPath();
+  for (const { segment } of batch) addFillSegment(ctx, segment);
+  const style = (batch[0] as FillOp).style;
+  if (style != null) ctx.fillStyle = style;
   ctx.fill();
 }
 
-export function renderPrimitive(
+function flushStroke(ctx: CanvasRenderingContext2D, batch: StrokeOp[]): void {
+  ctx.beginPath();
+  for (const { points } of batch) addSubpath(ctx, points);
+  const { width, style } = batch[0] as StrokeOp;
+  if (width != null) ctx.lineWidth = width;
+  if (style != null) ctx.strokeStyle = style;
+  ctx.stroke();
+}
+
+function runFillText(ctx: CanvasRenderingContext2D, op: FillTextOp): void {
+  if (op.font != null) ctx.font = op.font;
+  if (op.style != null) ctx.fillStyle = op.style;
+  ctx.fillText(op.text, op.x, op.y, op.maxWidth);
+}
+
+function mergeBounds(a: AABB<2>, b: AABB<2>): AABB<2> {
+  return { min: a.min.copy().min(b.min), max: a.max.copy().max(b.max) };
+}
+
+export function executeDrawOps(
   ctx: CanvasRenderingContext2D,
-  projected: ProjectedPrimitive,
+  ops: readonly DrawOp[]
+): void {
+  let i = 0;
+  while (i < ops.length) {
+    const curr = ops[i++] as DrawOp;
+    switch (curr.op) {
+      case "fillText": {
+        runFillText(ctx, curr);
+        break;
+      }
+
+      case "stroke": {
+        const batch: StrokeOp[] = [curr];
+        for (; i < ops.length; i++) {
+          const next = ops[i] as DrawOp;
+          if (
+            next.op !== "stroke" ||
+            next.style !== curr.style ||
+            next.width !== curr.width
+          ) {
+            break;
+          }
+          batch.push(next);
+        }
+        flushStroke(ctx, batch);
+        break;
+      }
+
+      case "fill": {
+        const batch: FillOp[] = [curr];
+        let bounds = curr.bounds;
+        for (; i < ops.length; i++) {
+          const next = ops[i] as DrawOp;
+          if (
+            next.op !== "fill" ||
+            next.style !== curr.style ||
+            boundsOverlap(bounds, next.bounds)
+          ) {
+            break;
+          }
+          batch.push(next);
+          bounds = mergeBounds(bounds, next.bounds);
+        }
+        flushFill(ctx, batch);
+        break;
+      }
+
+      default:
+        return checkExhausted(curr);
+    }
+  }
+}
+
+export function renderBatchedPrimitives(
+  ctx: CanvasRenderingContext2D,
+  projected: readonly ProjectedPrimitive[],
   projectOptions: ProjectOptions
 ): void {
-  switch (projected.type) {
-    case "Point":
-      renderPoint(ctx, projected);
-      break;
-    case "Line":
-      renderLine(ctx, projected, projectOptions);
-      break;
-    case "Polygon":
-      renderPolygon(ctx, projected, projectOptions);
-      break;
-    default:
-      return checkExhausted(projected);
-  }
+  executeDrawOps(
+    ctx,
+    projected.flatMap(primitive => toDrawOps(primitive, projectOptions, ctx))
+  );
 }

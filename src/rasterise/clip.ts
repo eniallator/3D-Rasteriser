@@ -99,9 +99,8 @@ const NEAR_PLANE_EPSILON = 0.01;
 
 export function clipPrimitivesToCamera(
   primitives: Primitive2D[],
-  projectOptions: ProjectOptions
+  { dirNorm, viewPos }: ProjectOptions
 ): Primitive2D[] {
-  const { dirNorm, viewPos } = projectOptions;
   const plane = {
     norm: dirNorm,
     d: -dirNorm.dot(viewPos) - NEAR_PLANE_EPSILON,

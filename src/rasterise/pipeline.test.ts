@@ -193,16 +193,22 @@ describe("renderPrepared", () => {
     const scene = prepareScene([mid, near, far]);
     renderPrepared(scene, projectOptions, { ctx });
 
+    // far/mid/near all share the default (unset) fill style, so the batched
+    // renderer draws them as one merged path: far's polygon moveTo, then
+    // mid's arc - which itself starts with a moveTo to break the subpath
+    // from the previous shape (see addFillSegment) - then near's polygon
+    // moveTo. That's 3 moveTo calls total, with mid's arc-start one in the
+    // middle (index 1) and near's polygon one last (index 2).
     const farMoveOrder = moveTo.mock.invocationCallOrder[0];
     const midArcOrder = arc.mock.invocationCallOrder[0];
-    const nearMoveOrder = moveTo.mock.invocationCallOrder[1];
+    const nearMoveOrder = moveTo.mock.invocationCallOrder[2];
 
     expect(farMoveOrder).toBeLessThan(midArcOrder);
     expect(midArcOrder).toBeLessThan(nearMoveOrder);
   });
 
   it("still renders both pieces of a polygon the BSP tree had to split, instead of dropping them from the frustum-visibility check", () => {
-    const { ctx, fill } = fakeCtx();
+    const { ctx, moveTo, fill } = fakeCtx();
     // Chosen as the BSP root splitter: `straddler` straddles its z=5 plane,
     // so `straddler` gets cut into two new polygon objects that were never
     // indexed by the BVH the frustum-visibility Set is built from.
@@ -216,14 +222,20 @@ describe("renderPrepared", () => {
     const scene = prepareScene([splitter, straddler]);
     renderPrepared(scene, projectOptions, { ctx });
 
-    // splitter (1 draw) + straddler's two split pieces (2 draws) = 3.
+    // All three share the default fill style, but their screen-space
+    // bounds overlap (the straddler's pieces sit inside the splitter's
+    // footprint) - the batcher never merges overlapping same-style fills
+    // (see executeDrawOps), since Canvas's nonzero winding rule can cancel
+    // out overlapping opposite-wound subpaths into a hole. So each polygon
+    // still gets its own fill() call; moveTo confirms all 3 subpaths ran.
+    expect(moveTo).toHaveBeenCalledTimes(3);
     expect(fill).toHaveBeenCalledTimes(3);
   });
 });
 
 describe("fullPipeline", () => {
   it("prepares and renders a scene end-to-end without throwing", () => {
-    const { ctx, fill } = fakeCtx();
+    const { ctx, moveTo, fill } = fakeCtx();
     const triangleA = createPolygon({
       points: [vec3(-1, -1, 5), vec3(1, -1, 5), vec3(0, 1, 5)],
     });
@@ -235,6 +247,11 @@ describe("fullPipeline", () => {
       fullPipeline([triangleA, triangleB], projectOptions, { ctx });
     }).not.toThrow();
 
+    // Both triangles share the default fill style, but their screen-space
+    // bounds overlap (they're both centred at the same x/y, just at
+    // different depths), so the batcher keeps them as separate fill()
+    // calls rather than risking a winding-rule hole where they'd overlap.
+    expect(moveTo).toHaveBeenCalledTimes(2);
     expect(fill).toHaveBeenCalledTimes(2);
   });
 });

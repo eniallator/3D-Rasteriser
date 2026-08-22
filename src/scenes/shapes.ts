@@ -1,10 +1,10 @@
+import { tuple } from "niall-utils";
 import { Vector } from "vectyped";
 
 import { createPolygon, type Polygon } from "../rasterise/types.ts";
 
-export type FaceDir = "+x" | "-x" | "+y" | "-y" | "+z" | "-z";
-
-const ALL_FACES: readonly FaceDir[] = ["+x", "-x", "+y", "-y", "+z", "-z"];
+const ALL_FACES = tuple("+x", "-x", "+y", "-y", "+z", "-z");
+export type FaceDir = (typeof ALL_FACES)[number];
 
 type Corner = readonly [0 | 1, 0 | 1, 0 | 1];
 
