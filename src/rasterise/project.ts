@@ -14,7 +14,7 @@ export interface CameraBasis {
   yAxis: Vector<3>;
 }
 
-export function cameraBasis({ dirNorm, fov }: ProjectOptions): CameraBasis {
+export function cameraBasis({ dirNorm, fov }: CameraOptions): CameraBasis {
   const screenCenterPos = dirNorm.copy().setMagnitude(1 / fov);
   const xAxis = dirNorm.crossProduct(Vector.create(0, 1, 0)).normalise();
   const yAxis = dirNorm.crossProduct(xAxis);
